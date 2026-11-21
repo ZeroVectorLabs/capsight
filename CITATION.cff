@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use Deepacket in research or teaching material, please cite it as below."
+title: "Deepacket: a browser-based packet-capture analyzer"
+type: software
+authors:
+  - name: "ZeroVector"
+    website: "https://github.com/ZeroVectorLabs"
+repository-code: "https://github.com/ZeroVectorLabs/deepacket"
+url: "https://zerovectorlabs.github.io/deepacket/"
+license: MIT
+version: 1.0.0
+keywords:
+  - pcap
+  - network forensics
+  - incident response
+  - MITRE ATT&CK
