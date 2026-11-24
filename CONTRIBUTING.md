@@ -1,6 +1,6 @@
-# Contributing to Deepacket
+# Contributing to Capsight
 
-Thanks for helping. Bug reports, captures that trip Deepacket up, and new detections are all welcome.
+Thanks for helping. Bug reports, captures that trip Capsight up, and new detections are all welcome.
 
 ## Reporting a problem
 
@@ -11,8 +11,8 @@ Open an issue with the bug report template. A small capture that reproduces the 
 You need Node 20 or newer and Python 3.10 or newer.
 
 ```
-git clone https://github.com/ZeroVectorLabs/deepacket.git
-cd deepacket
+git clone https://github.com/ZeroVectorLabs/capsight.git
+cd capsight
 npm test
 npm run build
 ```
@@ -21,9 +21,9 @@ npm run build
 
 ## Making a change
 
-1. Edit the files in `src/`. Do not edit `dist/deepacket.html` by hand.
+1. Edit the files in `src/`. Do not edit `dist/capsight.html` by hand.
 2. Run `npm test`.
-3. Run `npm run build` and commit the rebuilt `dist/deepacket.html` with your source change. CI fails if the bundle is stale.
+3. Run `npm run build` and commit the rebuilt `dist/capsight.html` with your source change. CI fails if the bundle is stale.
 4. Open a pull request and fill in the checklist.
 
 ## Adding a detection
