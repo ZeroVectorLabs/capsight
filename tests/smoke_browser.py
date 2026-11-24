@@ -46,6 +46,11 @@ async def main():
         await page.fill('#fin', 'ip:10.0.0.20 port:4444')
         await page.wait_for_timeout(500)
         count = await page.inner_text('#fcount')
+        # Clear filter removes the text and every chip, then hides itself
+        await page.click('#clearAll')
+        await page.wait_for_timeout(400)
+        if await page.input_value('#fin') or 'of' in await page.inner_text('#fcount') or await page.is_visible('#clearAll'):
+            errors.append('Clear filter did not reset the filter')
         # Back button returns to the start page; browser Forward reopens the capture; browser Back returns again
         await page.click('#backBtn')
         await page.wait_for_selector('#landing.on', timeout=5000)

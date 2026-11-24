@@ -263,6 +263,7 @@ function applyFilter() {
   const n = idx ? idx.length : cap.pk.length;
   $('#fcount').innerHTML = idx ? `<b>${fmtNum(n)}</b> of ${fmtNum(cap.pk.length)} packets` : `<b>${fmtNum(n)}</b> packets`;
   renderChips();
+  updateClearAll();
   drawStrip();
   S.dirty = { overview: 1, conversations: 1, packets: 1, insights: 1, threats: S.dirty.threats ?? 1, artifacts: S.dirty.artifacts ?? 1 };
   if (S.sel >= 0 && idx && !idx.includes(S.sel)) S.sel = -1;
@@ -278,13 +279,22 @@ function renderChips() {
 }
 $('#chips').addEventListener('click', e => { const b = e.target.closest('[data-chip]'); if (!b) return; S.chips[b.dataset.chip] = null; applyFilter(); });
 function setChip(k, v) { S.chips[k] = v; applyFilter(); }
+function filterActive() { const C = S.chips; return !!(S.fn || C.time || C.host || C.proto || C.ev || $('#fin').value.trim()); }
+function updateClearAll() { $('#clearAll').classList.toggle('hidden', !filterActive()); }
+function clearFilters() {
+  clearTimeout(finT);
+  S.chips = { time: null, host: null, proto: null, ev: null }; S.fn = null; S.expr = '';
+  $('#fin').value = ''; $('#fx').classList.remove('bad');
+  applyFilter();
+}
+$('#clearAll').onclick = clearFilters;
 let finT;
 $('#fin').addEventListener('input', e => {
   clearTimeout(finT);
   finT = setTimeout(() => {
     const v = e.target.value.trim();
     try { S.fn = v ? compileFilter(v) : null; S.expr = v; $('#fx').classList.remove('bad'); applyFilter(); }
-    catch (err) { $('#fx').classList.add('bad'); }
+    catch (err) { $('#fx').classList.add('bad'); updateClearAll(); }
   }, 220);
 });
 $('#fin').addEventListener('keydown', e => { if (e.key === 'Escape') { e.target.value = ''; e.target.dispatchEvent(new Event('input')); e.target.blur(); } });
