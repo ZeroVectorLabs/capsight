@@ -4,6 +4,7 @@ Notable changes to Deepacket, newest first.
 
 ## Unreleased
 
+- Back button: returns from an open capture to the start page to open another one. The browser's Back and Forward buttons do the same.
 - Security policy and private vulnerability reporting.
 - Issue templates for bug reports, feature requests and detection requests, plus links to Discussions and security reporting on the New issue page.
 - Contributing guide and pull request template.

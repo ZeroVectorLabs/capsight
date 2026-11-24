@@ -33,6 +33,19 @@ async def main():
         await page.fill('#fin', 'ip:10.0.0.20 port:4444')
         await page.wait_for_timeout(500)
         count = await page.inner_text('#fcount')
+        # Back button returns to the start page; browser Forward reopens the capture; browser Back returns again
+        await page.click('#backBtn')
+        await page.wait_for_selector('#landing.on', timeout=5000)
+        if await page.is_visible('#tabs') or await page.is_visible('#backBtn'):
+            errors.append('capture UI still visible on the start page')
+        await page.go_forward()
+        await page.wait_for_selector('#view-packets.on', timeout=5000)
+        await page.go_back()
+        await page.wait_for_selector('#landing.on', timeout=5000)
+        await page.click('#demoBtn')
+        await page.wait_for_selector('#view-overview.on', timeout=20000)
+        await page.click('#backBtn')
+        await page.wait_for_selector('#landing.on', timeout=5000)
         await browser.close()
     if '27 of' not in count:
         errors.append('filter returned unexpected count: ' + count)
