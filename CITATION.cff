@@ -8,7 +8,7 @@ authors:
 repository-code: "https://github.com/ZeroVectorLabs/deepacket"
 url: "https://zerovectorlabs.github.io/deepacket/"
 license: MIT
-version: 1.0.0
+version: 1.0.1
 keywords:
   - pcap
   - network forensics

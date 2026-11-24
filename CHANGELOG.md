@@ -2,7 +2,7 @@
 
 Notable changes to Deepacket, newest first.
 
-## Unreleased
+## 1.0.1
 
 - Back button: returns from an open capture to the start page to open another one. The browser's Back and Forward buttons do the same.
 - Security policy and private vulnerability reporting.
