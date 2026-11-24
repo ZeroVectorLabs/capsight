@@ -5,11 +5,11 @@
 <h1 align="center">Capsight</h1>
 
 <p align="center">
-  <a href="https://zerovectorlabs.github.io/capsight/"><img src="https://img.shields.io/badge/try_it-live_in_your_browser-22d3ee?style=flat-square" alt="Try it live"></a>
-  <a href="https://github.com/ZeroVectorLabs/capsight/releases/latest"><img src="https://img.shields.io/github/v/release/ZeroVectorLabs/capsight?style=flat-square&color=22d3ee" alt="Latest release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-22d3ee?style=flat-square" alt="MIT license"></a>
+  <a href="https://zerovectorlabs.github.io/capsight/"><img src="https://img.shields.io/badge/try_it-live_in_your_browser-8ab8ff?style=flat-square" alt="Try it live"></a>
+  <a href="https://github.com/ZeroVectorLabs/capsight/releases/latest"><img src="https://img.shields.io/github/v/release/ZeroVectorLabs/capsight?style=flat-square&color=8ab8ff" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-8ab8ff?style=flat-square" alt="MIT license"></a>
   <a href="https://github.com/ZeroVectorLabs/capsight/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ZeroVectorLabs/capsight/ci.yml?branch=main&style=flat-square&label=tests" alt="Tests"></a>
-  <a href="https://github.com/ZeroVectorLabs/capsight/stargazers"><img src="https://img.shields.io/github/stars/ZeroVectorLabs/capsight?style=flat-square&color=22d3ee" alt="GitHub stars"></a>
+  <a href="https://github.com/ZeroVectorLabs/capsight/stargazers"><img src="https://img.shields.io/github/stars/ZeroVectorLabs/capsight?style=flat-square&color=8ab8ff" alt="GitHub stars"></a>
 </p>
 
 <p align="center">
@@ -234,14 +234,15 @@ src/
   graph.js        network map
   strip.js        capture strip and start-page preview
   art.js          Artifacts view
-  style.css       theme (navy and cyan, from the logo)
+  style.css       theme (calm blues and soft glass controls)
   shell.html      page template
-assets/           logo
-fonts/            Archivo and IBM Plex Mono (SIL Open Font License), embedded at build time
+assets/           logo, link-preview card and start-page app images
+fonts/            DM Sans and IBM Plex Mono (SIL Open Font License), embedded at build time
 samples/          attack_scenario.pcap
 tools/
   build.py          bundles everything into dist/capsight.html
   gen_attack_pcap.py  generates the sample capture
+  screenshots.py    retakes the README screenshots and start-page images
 tests/
   engine.test.mjs   engine tests for Node's built-in test runner
   smoke_browser.py  browser smoke test (Playwright)

@@ -87,4 +87,5 @@ function drawSpecimen() {
   $('#speclg').innerHTML = order.slice(0, 5).map((p, i) => `<span class="lg" style="cursor:default"><i style="background:var(--s${i + 1})"></i>${esc(p)}</span>`).join('');
 }
 $('#specimen').addEventListener('click', loadDemo);
+$('#heroShot').addEventListener('click', loadDemo);
 prepSpecimen();

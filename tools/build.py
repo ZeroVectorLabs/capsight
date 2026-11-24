@@ -9,9 +9,11 @@ demo = base64.b64encode(gzip.compress((ROOT / 'samples' / 'attack_scenario.pcap'
 def ff(name, file, w, extra=''):
     d = base64.b64encode((ROOT / 'fonts' / file).read_bytes()).decode()
     return "@font-face{font-family:'%s';src:url(data:font/woff2;base64,%s) format('woff2');font-weight:%s;font-style:normal;font-display:swap;%s}\n" % (name, d, w, extra)
-fonts = ff('Archivo','archivo.woff2','100 900','font-stretch:62% 125%;') + ff('IBM Plex Mono','plex400.woff2','400') + ff('IBM Plex Mono','plex500.woff2','500')
+fonts = ff('DM Sans','dmsans.woff2','100 1000') + ff('IBM Plex Mono','plex400.woff2','400') + ff('IBM Plex Mono','plex500.woff2','500')
 logo = lambda n: 'data:image/png;base64,' + base64.b64encode((ROOT / 'assets' / f'logo-{n}.png').read_bytes()).decode()
 html = html.replace('/*FONTS*/', fonts).replace('/*LOGO64*/', logo(64)).replace('/*LOGO256*/', logo(256)).replace('/*ZV64*/', 'data:image/png;base64,' + base64.b64encode((ROOT / 'assets' / 'zerovector-64.png').read_bytes()).decode())
+shot = lambda n: 'data:image/webp;base64,' + base64.b64encode((ROOT / 'assets' / f'shot-{n}.webp').read_bytes()).decode()
+html = html.replace('/*SHOTDARK*/', shot('dark')).replace('/*SHOTLIGHT*/', shot('light'))
 html = html.replace('/*CSS*/', (src/'style.css').read_text()).replace('/*JS*/', js).replace('/*DEMO*/', demo)
 
 def _split(doc):
