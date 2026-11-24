@@ -4,9 +4,12 @@ Notable changes to Capsight, newest first.
 
 ## 2.0.0 (2026-11-24)
 
+- **Findings report:** a Report button downloads a write-up of the capture as PDF, web page, Word (.docx) or Markdown, with the summary, every detection in ATT&CK order, hosts, indicators, recovered files and credentials. Passwords are masked unless you choose to include them.
+- **Smoother tabs:** the active-tab highlight slides between tabs, and each view eases in when it opens.
+- **Headline:** "Open a capture. See what really happened." replaces a line that promised an attack in every capture.
 - **New name:** Deepacket is now Capsight, with a new logo. The site moved to https://zerovectorlabs.github.io/capsight/ and the offline file is now `dist/capsight.html`.
-- **New look:** a calm blue palette across the app and charts, soft glass buttons, tabs and filter bar, and the DM Sans typeface.
-- **New start page:** a clean, Apple-style page with the app shown on a laptop, feature tiles with real screenshots, and the key numbers from the sample. Black in the dark theme, soft blue in the light theme. Click the laptop to open the sample attack.
+- **New look:** one theme on every page, black in dark mode and soft blue in light mode, with buttons in the logo's cyan-to-blue, blue-family charts and the DM Sans typeface.
+- **New start page:** a clean page that opens with the logo, the app shown on a laptop and feature tiles with real screenshots. Click the laptop to open the sample attack.
 - Exported files are now named `capsight_*` instead of `deepacket_*`.
 - `tools/screenshots.py` retakes the README screenshots and the start-page images.
 
