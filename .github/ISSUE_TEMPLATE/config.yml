@@ -1,11 +1,11 @@
 blank_issues_enabled: true
 contact_links:
   - name: Questions and ideas
-    url: https://github.com/ZeroVectorLabs/deepacket/discussions
-    about: Ask how to use Deepacket or share an idea in Discussions.
+    url: https://github.com/ZeroVectorLabs/capsight/discussions
+    about: Ask how to use Capsight or share an idea in Discussions.
   - name: Report a security vulnerability
-    url: https://github.com/ZeroVectorLabs/deepacket/security/advisories/new
+    url: https://github.com/ZeroVectorLabs/capsight/security/advisories/new
     about: Report security issues privately, not as a public issue.
-  - name: Open Deepacket
-    url: https://zerovectorlabs.github.io/deepacket/
+  - name: Open Capsight
+    url: https://zerovectorlabs.github.io/capsight/
     about: The live app, running in your browser.

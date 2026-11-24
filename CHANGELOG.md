@@ -1,6 +1,10 @@
 # Changelog
 
-Notable changes to Deepacket, newest first.
+Notable changes to Capsight, newest first.
+
+## Unreleased
+
+- Renamed from Deepacket to Capsight, with a new logo. The site moved to https://zerovectorlabs.github.io/capsight/ and the offline file is now `dist/capsight.html`.
 
 ## 1.0.1
 

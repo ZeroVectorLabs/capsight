@@ -1,6 +1,6 @@
 # Code of Conduct
 
-Deepacket is a tool for defenders, students and researchers. Keep this project a place where anyone can ask a question or send a fix.
+Capsight is a tool for defenders, students and researchers. Keep this project a place where anyone can ask a question or send a fix.
 
 ## Expected
 

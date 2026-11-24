@@ -1,15 +1,15 @@
 <p align="center">
-  <img src="assets/logo-256.png" width="128" alt="Deepacket logo">
+  <img src="assets/logo-256.png" width="128" alt="Capsight logo">
 </p>
 
-<h1 align="center">Deepacket</h1>
+<h1 align="center">Capsight</h1>
 
 <p align="center">
-  <a href="https://zerovectorlabs.github.io/deepacket/"><img src="https://img.shields.io/badge/try_it-live_in_your_browser-22d3ee?style=flat-square" alt="Try it live"></a>
-  <a href="https://github.com/ZeroVectorLabs/deepacket/releases/latest"><img src="https://img.shields.io/github/v/release/ZeroVectorLabs/deepacket?style=flat-square&color=22d3ee" alt="Latest release"></a>
+  <a href="https://zerovectorlabs.github.io/capsight/"><img src="https://img.shields.io/badge/try_it-live_in_your_browser-22d3ee?style=flat-square" alt="Try it live"></a>
+  <a href="https://github.com/ZeroVectorLabs/capsight/releases/latest"><img src="https://img.shields.io/github/v/release/ZeroVectorLabs/capsight?style=flat-square&color=22d3ee" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-22d3ee?style=flat-square" alt="MIT license"></a>
-  <a href="https://github.com/ZeroVectorLabs/deepacket/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ZeroVectorLabs/deepacket/ci.yml?branch=main&style=flat-square&label=tests" alt="Tests"></a>
-  <a href="https://github.com/ZeroVectorLabs/deepacket/stargazers"><img src="https://img.shields.io/github/stars/ZeroVectorLabs/deepacket?style=flat-square&color=22d3ee" alt="GitHub stars"></a>
+  <a href="https://github.com/ZeroVectorLabs/capsight/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ZeroVectorLabs/capsight/ci.yml?branch=main&style=flat-square&label=tests" alt="Tests"></a>
+  <a href="https://github.com/ZeroVectorLabs/capsight/stargazers"><img src="https://img.shields.io/github/stars/ZeroVectorLabs/capsight?style=flat-square&color=22d3ee" alt="GitHub stars"></a>
 </p>
 
 <p align="center">
@@ -20,22 +20,22 @@
 </p>
 
 <p align="center">
-  <a href="https://zerovectorlabs.github.io/deepacket/"><b>Open Deepacket in your browser</b></a>
+  <a href="https://zerovectorlabs.github.io/capsight/"><b>Open Capsight in your browser</b></a>
   &nbsp;·&nbsp;
-  <a href="https://zerovectorlabs.github.io/deepacket/attack_scenario.pcap">Download the sample attack capture</a>
+  <a href="https://zerovectorlabs.github.io/capsight/attack_scenario.pcap">Download the sample attack capture</a>
   &nbsp;·&nbsp;
   <a href="docs/media/deepacket_demo.mp4">Watch the 75-second demo</a>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/overview.png" alt="Deepacket overview of a capture" width="900">
+  <img src="docs/screenshots/overview.png" alt="Capsight overview of a capture" width="900">
 </p>
 
 ---
 
 ## Contents
 
-- [Why Deepacket](#why-deepacket)
+- [Why Capsight](#why-capsight)
 - [Quick start](#quick-start)
 - [Features](#features)
   - [Overview](#overview)
@@ -56,9 +56,9 @@
 - [Contributing](#contributing)
 - [License](#license)
 
-## Why Deepacket
+## Why Capsight
 
-Wireshark tells you what every packet says. Deepacket tells you what happened. Drop in a `.pcap` or `.pcapng` and within seconds you see:
+Wireshark tells you what every packet says. Capsight tells you what happened. Drop in a `.pcap` or `.pcapng` and within seconds you see:
 
 - the shape of the traffic and who the busy hosts are,
 - whether an attack is in the capture, which machines played which role, and every step in order,
@@ -68,9 +68,9 @@ It is a single HTML file with no server, no install and no network requests. The
 
 ## Quick start
 
-**Online:** open **https://zerovectorlabs.github.io/deepacket/** and drop a capture on the page. The site is the same single HTML file served by GitHub Pages; your capture is still decoded locally and never uploaded.
+**Online:** open **https://zerovectorlabs.github.io/capsight/** and drop a capture on the page. The site is the same single HTML file served by GitHub Pages; your capture is still decoded locally and never uploaded.
 
-**Offline:** download [`dist/deepacket.html`](dist/deepacket.html), open it in Chrome, Edge, Firefox or Safari, and drop a capture anywhere on the page or click **Choose a capture file**.
+**Offline:** download [`dist/capsight.html`](dist/capsight.html), open it in Chrome, Edge, Firefox or Safari, and drop a capture anywhere on the page or click **Choose a capture file**.
 
 Want to see it work first? Click **Open the sample attack** on the start page. It loads a built-in capture containing a full intrusion.
 
@@ -208,7 +208,7 @@ Regenerate it with `npm run sample` (needs Python with scapy and Pillow). The ou
 
 ## Privacy
 
-Deepacket makes no network requests. The fonts and the sample are embedded in the HTML file, and captures are decoded with JavaScript in the page. Nothing you open is uploaded or stored. The only links that leave the page are the MITRE ATT&amp;CK technique links, the VirusTotal hash lookups and the link to this repository; they open in a new tab only when you click them, and the first two send only the technique ID or hash.
+Capsight makes no network requests. The fonts and the sample are embedded in the HTML file, and captures are decoded with JavaScript in the page. Nothing you open is uploaded or stored. The only links that leave the page are the MITRE ATT&amp;CK technique links, the VirusTotal hash lookups and the link to this repository; they open in a new tab only when you click them, and the first two send only the technique ID or hash.
 
 ## Development
 
@@ -216,12 +216,12 @@ Requirements: Node 20 or newer for the tests and Python 3.10 or newer for the bu
 
 ```sh
 npm test                # engine tests (parser, detections, artifacts)
-npm run build           # rebuild dist/deepacket.html after editing src/
+npm run build           # rebuild dist/capsight.html after editing src/
 npm run test:browser    # browser smoke test; needs `pip install playwright` and Chromium
 npm run sample          # regenerate samples/attack_scenario.pcap (needs scapy and Pillow)
 ```
 
-Edit files in `src/`, run `npm run build`, and commit the rebuilt `dist/deepacket.html` together with your source changes. Every push to `main` that changes `dist/` redeploys the live site through `.github/workflows/pages.yml`. CI runs the tests and `python3 tools/build.py --check`, which fails if the committed bundle is stale.
+Edit files in `src/`, run `npm run build`, and commit the rebuilt `dist/capsight.html` together with your source changes. Every push to `main` that changes `dist/` redeploys the live site through `.github/workflows/pages.yml`. CI runs the tests and `python3 tools/build.py --check`, which fails if the committed bundle is stale.
 
 ## Project layout
 
@@ -240,7 +240,7 @@ assets/           logo
 fonts/            Archivo and IBM Plex Mono (SIL Open Font License), embedded at build time
 samples/          attack_scenario.pcap
 tools/
-  build.py          bundles everything into dist/deepacket.html
+  build.py          bundles everything into dist/capsight.html
   gen_attack_pcap.py  generates the sample capture
 tests/
   engine.test.mjs   engine tests for Node's built-in test runner
@@ -259,9 +259,9 @@ dist/             the built single-file app (generated, committed)
 
 ## Contributing
 
-Bug reports, captures that trip it up, and new detections are all welcome. [Open an issue](https://github.com/ZeroVectorLabs/deepacket/issues/new) with what you expected and what you saw; if you can share a small capture that reproduces it, attach it (strip anything sensitive first). For code, see [Development](#development): edit `src/`, run `npm test` and `npm run build`, and commit the rebuilt bundle with your change.
+Bug reports, captures that trip it up, and new detections are all welcome. [Open an issue](https://github.com/ZeroVectorLabs/capsight/issues/new) with what you expected and what you saw; if you can share a small capture that reproduces it, attach it (strip anything sensitive first). For code, see [Development](#development): edit `src/`, run `npm test` and `npm run build`, and commit the rebuilt bundle with your change.
 
-If Deepacket saved you time, **star the repo** so other analysts can find it, and **Watch → Custom → Releases** to hear about new detections.
+If Capsight saved you time, **star the repo** so other analysts can find it, and **Watch → Custom → Releases** to hear about new detections.
 
 ## License
 
@@ -271,5 +271,5 @@ If Deepacket saved you time, **star the repo** so other analysts can find it, an
 
 <p align="center">
   <a href="https://github.com/ZeroVectorLabs"><img src="assets/zerovector-128.png" width="72" alt="ZeroVector logo"></a><br>
-  Deepacket is made by <a href="https://github.com/ZeroVectorLabs"><b>ZeroVector</b></a>.
+  Capsight is made by <a href="https://github.com/ZeroVectorLabs"><b>ZeroVector</b></a>.
 </p>

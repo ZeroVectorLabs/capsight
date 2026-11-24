@@ -1,4 +1,4 @@
-"""Render assets/og.png, the 1200x630 link-preview card for Deepacket.
+"""Render assets/og.png, the 1200x630 link-preview card for Capsight.
 
 Usage: python3 tools/social_card.py assets/og.png   (needs Pillow, fontTools and brotli)
 """
@@ -68,7 +68,7 @@ card.paste(fade, (0, 0), fade)
 d = ImageDraw.Draw(card)
 logo = Image.open(R + 'assets/logo-128.png').convert('RGBA').resize((72, 72), Image.LANCZOS)
 card.paste(logo, (64, 64), logo)
-d.text((150, 74), 'Deepacket', font=font('archivo.woff2', 46, 700, 100), fill=WHITE)
+d.text((150, 74), 'Capsight', font=font('archivo.woff2', 46, 700, 100), fill=WHITE)
 
 h = font('archivo.woff2', 64, 800, 90)
 d.text((64, 196), 'Open a capture.', font=h, fill=WHITE)

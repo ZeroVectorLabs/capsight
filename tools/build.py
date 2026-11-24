@@ -1,4 +1,4 @@
-"""Bundle src/, fonts and the sample capture into one self-contained HTML file: dist/deepacket.html."""
+"""Bundle src/, fonts and the sample capture into one self-contained HTML file: dist/capsight.html."""
 import base64, gzip, pathlib
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 src = ROOT / 'src'
@@ -21,13 +21,13 @@ def _split(doc):
     return doc[:a] + doc[b:], gzip.decompress(base64.b64decode(doc[a:b]))
 
 import sys
-out = ROOT / 'dist' / 'deepacket.html'
+out = ROOT / 'dist' / 'capsight.html'
 if '--check' in sys.argv:
     fresh_rest, fresh_demo = _split(html)
     old_rest, old_demo = _split(out.read_text())
     if fresh_rest != old_rest or fresh_demo != old_demo:
-        sys.exit('dist/deepacket.html is stale. Run `npm run build` and commit it.')
-    print('dist/deepacket.html is up to date')
+        sys.exit('dist/capsight.html is stale. Run `npm run build` and commit it.')
+    print('dist/capsight.html is up to date')
 else:
     out.parent.mkdir(exist_ok=True)
     out.write_text(html)
