@@ -13,10 +13,10 @@
 </p>
 
 <p align="center">
-  <b>Open a capture. Find the attack in it.</b><br>
+  <b>Open a capture. See what really happened.</b><br>
   A packet-capture analyzer that runs entirely in your browser: traffic analytics, a network diagram,
-  threat detection mapped to MITRE ATT&amp;CK, attack-flow reconstruction, and extraction of files,
-  credentials and indicators.
+  threat detection mapped to MITRE ATT&amp;CK, attack-flow reconstruction, extraction of files,
+  credentials and indicators, and findings reports as PDF, web page, Word or Markdown.
 </p>
 
 <p align="center">
@@ -44,6 +44,7 @@
   - [Packets](#packets)
   - [Artifacts](#artifacts)
   - [DNS, TLS and HTTP](#dns-tls-and-http)
+  - [Findings report](#findings-report)
 - [How to work with it](#how-to-work-with-it)
 - [Filter syntax](#filter-syntax)
 - [Detections](#detections)
@@ -62,7 +63,8 @@ Wireshark tells you what every packet says. Capsight tells you what happened. Dr
 
 - the shape of the traffic and who the busy hosts are,
 - whether an attack is in the capture, which machines played which role, and every step in order,
-- the files, passwords and indicators that crossed the wire, ready to hand to your threat-intel tools.
+- the files, passwords and indicators that crossed the wire, ready to hand to your threat-intel tools,
+- a findings report you can send to your team as a PDF, web page, Word document or Markdown.
 
 It is a single HTML file with no server, no install and no network requests. The capture never leaves your machine.
 
@@ -137,6 +139,12 @@ Everything worth keeping from the capture, in four parts.
 
 Queried domains grouped by registered domain with their answers and NXDOMAIN counts, TLS server names with ALPN and bytes, and every cleartext HTTP request with status and user agent. Click a row to jump to its packets.
 
+### Findings report
+
+Click **Report** in the top bar to download a write-up of the capture as a **PDF**, a **web page**, a **Word** document or **Markdown**. It holds the verdict and summary, every detection in order with its MITRE ATT&amp;CK tactic and technique, the hosts involved, indicators, recovered files with SHA-256 hashes, and cleartext credentials. Passwords are masked unless you choose to include them. A clean capture gets a report that says so, and that no known attack pattern matched. The PDF is made with your browser’s print window (choose **Save as PDF**); like everything else, the report is built in the page and never uploaded.
+
+<p align="center"><img src="docs/screenshots/report.png" alt="Download a findings report as PDF, web page, Word or Markdown" width="820"></p>
+
 ## How to work with it
 
 A typical investigation:
@@ -146,13 +154,16 @@ A typical investigation:
 3. **Check each detection.** Use **Show packets** to see the evidence and **Follow stream** to read the conversation (for example, the commands typed in a reverse shell).
 4. **Look at the network map** to see which machines were involved and which internal hosts the attacker reached.
 5. **Collect artifacts.** Hash and save suspicious files, list the exposed credentials that need resetting, and copy the indicators into your blocklist or SIEM.
-6. **Dig deeper with filters.** For example `ip:10.0.0.20 !tls`, `dns:exfil`, `status>=400`, or `threat` to see only evidence packets.
+6. **Write it up.** Click **Report** and send the PDF or Word file to your team, or paste the Markdown into a ticket.
+7. **Dig deeper with filters.** For example `ip:10.0.0.20 !tls`, `dns:exfil`, `status>=400`, or `threat` to see only evidence packets.
 
 Keyboard: `/` focuses the filter, arrow keys and Page Up/Down move through the packet list, `Esc` closes dialogs.
 
 ## Filter syntax
 
 Terms are combined with AND. Use `or` between groups and prefix a term with `!` to negate it. Operators: `:` `==` `!=` `>` `<` `>=` `<=`.
+
+**Clear filter**, next to the packet count, removes the filter text, every chip and the selected time window in one click.
 
 | Filter | Matches |
 |---|---|
@@ -234,7 +245,8 @@ src/
   graph.js        network map
   strip.js        capture strip and start-page preview
   art.js          Artifacts view
-  style.css       theme (calm blues and soft glass controls)
+  report.js       findings report (PDF, web page, Word, Markdown)
+  style.css       theme: black (dark) and soft blue (light), logo-coloured buttons
   shell.html      page template
 assets/           logo, link-preview card and start-page app images
 fonts/            DM Sans and IBM Plex Mono (SIL Open Font License), embedded at build time
