@@ -103,24 +103,52 @@ function setCapture(cap) {
   { const ab = $('#abadge'); ab.textContent = cap.art ? ab.textContent : '…'; ab.classList.add('ok'); }
   S.dirty = {}; setTimeout(ensureArt, 60);
   S.roles = new Map(); if (cap.flow) cap.flow.lanes.forEach(l => S.roles.set(l.id, l.role));
-  $('#landing').classList.remove('on');
-  ['#filemeta', '#tabs', '#filterbar', '#openBtn2', '#strip'].forEach(s => $(s).classList.remove('hidden'));
+  showApp(true);
   $('#filemeta').innerHTML = `<span class="fname" title="${esc(cap.name)}">${esc(cap.name)}</span><span class="pill">${fmtNum(cap.pk.length)} packets, ${fmtBytes(cap.size)}, ${fmtDur(cap.dur)}</span>`;
   const n = cap.threats.length, crit = cap.threats.filter(d => d.sev === 'critical').length;
   const b = $('#tbadge'); b.textContent = n; b.className = 'badge' + (n ? '' : ' ok'); b.style.background = n && !crit ? 'var(--high)' : '';
   const h = location.hash.slice(1);
-  S.view = ['overview', 'threats', 'conversations', 'packets', 'artifacts', 'insights'].includes(h) ? h : 'overview';
+  S.view = VIEWS.includes(h) ? h : 'overview';
+  // opening a capture from the start page adds a history entry, so Back (ours or the browser's) returns there
+  if (!VIEWS.includes(h)) { try { history.pushState({ home: 1 }, '', '#' + S.view); S.fromHome = true; } catch (e) {} }
   $$('.view').forEach(x => x.classList.toggle('on', x.id === 'view-' + S.view));
   applyFilter();
   go(S.view);
 }
 
+/* ---------- start page and back ---------- */
+const VIEWS = ['overview', 'threats', 'conversations', 'packets', 'artifacts', 'insights'];
+function showApp(on) {
+  $('#landing').classList.toggle('on', !on);
+  ['#filemeta', '#tabs', '#filterbar', '#openBtn2', '#reportBtn', '#strip', '#backBtn'].forEach(s => $(s).classList.toggle('hidden', !on));
+  if (!on) {
+    $$('.view').forEach(x => x.classList.remove('on'));
+    $('#modal').classList.remove('on'); untip();
+    if (S.graph) S.graph.active = false;
+    S.home = true; scrollTo(0, 0); requestAnimationFrame(drawSpecimen);
+  } else S.home = false;
+}
+function goHome() {
+  if (S.fromHome && history.state && history.state.home) { history.back(); return; }  // pops to the start page entry
+  try { history.pushState(null, '', location.pathname + location.search); } catch (e) {}
+  showApp(false);
+}
+
 /* ---------- routing ---------- */
-function go(v) { if (location.hash.slice(1) !== v) { try { history.replaceState(null, '', '#' + v); } catch (e) { location.hash = v; } } route(v); }
+function moveTabPill(instant) {
+  const p = $('#tabpill'), t = $('.tab.on'); if (!p || !t || !t.offsetWidth) return;
+  const first = !p.style.width || p.style.width === '0px';
+  p.classList.toggle('instant', !!instant || first);
+  p.style.width = t.offsetWidth + 'px';
+  p.style.transform = 'translateX(' + (t.offsetLeft) + 'px)';
+  if (instant || first) requestAnimationFrame(() => p.classList.remove('instant'));
+}
+function go(v) { if (location.hash.slice(1) !== v) { try { history.replaceState(history.state, '', '#' + v); } catch (e) { location.hash = v; } } route(v); }
 function route(v) {
   if (!S.cap) return;
   S.view = v;
   $$('.tab').forEach(t => t.classList.toggle('on', t.dataset.view === v));
+  moveTabPill();
   $$('.view').forEach(x => x.classList.toggle('on', x.id === 'view-' + v));
   const noFilter = v === 'threats' || v === 'artifacts';
   $('#filterbar').style.display = $('#strip').style.display = noFilter ? 'none' : '';
@@ -129,7 +157,12 @@ function route(v) {
   render();
   if (v === 'conversations' && S.graph) S.graph.kick();
 }
-window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h && h !== S.view) route(h); });
+window.addEventListener('hashchange', () => {
+  const h = location.hash.slice(1);
+  if (!VIEWS.includes(h)) { if (S.cap && !S.home) { S.fromHome = false; showApp(false); } return; }
+  if (S.cap && S.home) { showApp(true); S.view = null; }  // browser Forward back into the capture
+  if (h !== S.view) route(h);
+});
 function render() {
   const v = S.view;
   if (!S.dirty[v]) return;
@@ -230,6 +263,7 @@ function applyFilter() {
   const n = idx ? idx.length : cap.pk.length;
   $('#fcount').innerHTML = idx ? `<b>${fmtNum(n)}</b> of ${fmtNum(cap.pk.length)} packets` : `<b>${fmtNum(n)}</b> packets`;
   renderChips();
+  updateClearAll();
   drawStrip();
   S.dirty = { overview: 1, conversations: 1, packets: 1, insights: 1, threats: S.dirty.threats ?? 1, artifacts: S.dirty.artifacts ?? 1 };
   if (S.sel >= 0 && idx && !idx.includes(S.sel)) S.sel = -1;
@@ -245,13 +279,22 @@ function renderChips() {
 }
 $('#chips').addEventListener('click', e => { const b = e.target.closest('[data-chip]'); if (!b) return; S.chips[b.dataset.chip] = null; applyFilter(); });
 function setChip(k, v) { S.chips[k] = v; applyFilter(); }
+function filterActive() { const C = S.chips; return !!(S.fn || C.time || C.host || C.proto || C.ev || $('#fin').value.trim()); }
+function updateClearAll() { $('#clearAll').classList.toggle('hidden', !filterActive()); }
+function clearFilters() {
+  clearTimeout(finT);
+  S.chips = { time: null, host: null, proto: null, ev: null }; S.fn = null; S.expr = '';
+  $('#fin').value = ''; $('#fx').classList.remove('bad');
+  applyFilter();
+}
+$('#clearAll').onclick = clearFilters;
 let finT;
 $('#fin').addEventListener('input', e => {
   clearTimeout(finT);
   finT = setTimeout(() => {
     const v = e.target.value.trim();
     try { S.fn = v ? compileFilter(v) : null; S.expr = v; $('#fx').classList.remove('bad'); applyFilter(); }
-    catch (err) { $('#fx').classList.add('bad'); }
+    catch (err) { $('#fx').classList.add('bad'); updateClearAll(); }
   }, 220);
 });
 $('#fin').addEventListener('keydown', e => { if (e.key === 'Escape') { e.target.value = ''; e.target.dispatchEvent(new Event('input')); e.target.blur(); } });
@@ -601,7 +644,7 @@ function renderInsights() {
 function renderThreats() {
   const el = $('#view-threats'), cap = S.cap, D = cap.threats, F = cap.flow;
   if (!D.length) {
-    el.innerHTML = `<div class="clean-state"><div class="ic">${SVGI(IC.check, 30)}</div><h2>No threats detected</h2><p>Deepacket checked ${fmtNum(cap.pk.length)} packets for port scans, host sweeps, brute force, web exploits (SQLi, XSS, traversal, command injection, Log4Shell, Shellshock), cleartext credentials, ARP spoofing, rogue DHCP, reverse shells, beaconing, DNS tunneling, DGA, exfiltration and floods. Nothing matched.</p><p class="hint" style="margin-top:12px">Detection is heuristic. A clean result does not prove the traffic is benign.</p></div>`;
+    el.innerHTML = `<div class="clean-state"><div class="ic">${SVGI(IC.check, 30)}</div><h2>No threats detected</h2><p>Capsight checked ${fmtNum(cap.pk.length)} packets for port scans, host sweeps, brute force, web exploits (SQLi, XSS, traversal, command injection, Log4Shell, Shellshock), cleartext credentials, ARP spoofing, rogue DHCP, reverse shells, beaconing, DNS tunneling, DGA, exfiltration and floods. Nothing matched.</p><p class="hint" style="margin-top:12px">Detection is heuristic. A clean result does not prove the traffic is benign.</p></div>`;
     return;
   }
   const cnt = s => D.filter(d => d.sev === s).length;
@@ -696,7 +739,8 @@ $('#openBtn').onclick = $('#openBtn2').onclick = () => $('#file').click();
 $('#file').onchange = e => { openFile(e.target.files[0]); e.target.value = ''; };
 $('#demoBtn').onclick = loadDemo;
 $('#themeBtn').onclick = () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
-$('#brand').onclick = () => { if (S.cap) go('overview'); };
+$('#brand').onclick = () => { if (S.cap && !S.home) go('overview'); };
+$('#backBtn').onclick = goHome;
 $$('.tab').forEach(t => t.onclick = () => go(t.dataset.view));
 $('#mclose').onclick = () => $('#modal').classList.remove('on');
 $('#modal').onclick = e => { if (e.target.id === 'modal') $('#modal').classList.remove('on'); };
@@ -726,4 +770,5 @@ window.addEventListener('dragenter', e => { if (![...e.dataTransfer.types].inclu
 window.addEventListener('dragleave', () => { if (--dragN <= 0) { dragN = 0; $('#dzf').classList.remove('on'); $('#drop').classList.remove('over'); } });
 window.addEventListener('dragover', e => e.preventDefault());
 window.addEventListener('drop', e => { e.preventDefault(); dragN = 0; $('#dzf').classList.remove('on'); $('#drop').classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) openFile(f); });
-let rzT; window.addEventListener('resize', () => { clearTimeout(rzT); rzT = setTimeout(() => { drawSpecimen(); if (!S.cap) return; drawStrip(); drawSpecimen(); if (S.view === 'overview') { drawTimeline(); drawSizes(); } if (S.view === 'threats') drawSequence(); if (S.view === 'packets') drawRows(); }, 150); });
+let rzT; window.addEventListener('resize', () => { moveTabPill(true); clearTimeout(rzT); rzT = setTimeout(() => { drawSpecimen(); if (!S.cap) return; drawStrip(); drawSpecimen(); if (S.view === 'overview') { drawTimeline(); drawSizes(); } if (S.view === 'threats') drawSequence(); if (S.view === 'packets') drawRows(); }, 150); });
+if (document.fonts) document.fonts.ready.then(() => moveTabPill(true));
