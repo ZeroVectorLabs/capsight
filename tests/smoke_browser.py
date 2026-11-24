@@ -1,4 +1,4 @@
-"""Browser smoke test: opens dist/capsight.html, loads the sample and visits every view.
+"""Browser smoke test: opens dist/capsight.html, loads the sample, visits every view and downloads reports.
 
 Needs Python Playwright and a Chromium/Chrome build:  pip install playwright && playwright install chromium
 Run:  python3 tests/smoke_browser.py   (exits non-zero on any page error; set CHROME_PATH to use an installed Chrome)
@@ -29,6 +29,19 @@ async def main():
             await page.click('#dlEverything')
         if not (await dl.value).suggested_filename.endswith('_artifacts.zip'):
             errors.append('artifact zip download has an unexpected name')
+        # findings report: Markdown and Word downloads, passwords masked by default
+        await page.click('#reportBtn')
+        async with page.expect_download() as dl:
+            await page.click('.rpt-opt[data-fmt=md]')
+        md_path = await (await dl.value).path()
+        md = open(md_path, encoding='utf-8').read()
+        if '25 security detections' not in md or 'Summer2026!' in md:
+            errors.append('report is missing detections or shows a password it should mask')
+        async with page.expect_download() as dl:
+            await page.click('.rpt-opt[data-fmt=docx]')
+        if not (await dl.value).suggested_filename.endswith('_report.docx'):
+            errors.append('Word report has an unexpected name')
+        await page.click('#mclose')
         await page.click('.tab[data-view=packets]')
         await page.fill('#fin', 'ip:10.0.0.20 port:4444')
         await page.wait_for_timeout(500)

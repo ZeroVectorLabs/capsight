@@ -24,7 +24,7 @@
   --text: #0b1b33; --text-2: #3d4f6b; --muted: #5a6b85;
   --accent: #1f5fd6; --accent-soft: rgba(31,95,214,.1); --accent-ink: #1f5fd6;
   --btn: #1590c9; --btn-ink: #04111f; --btn-bg: linear-gradient(135deg, #67e8f9, #1fa6dd 60%, #2a8de0); --btn-line: #0b6fa6;
-  --gl: rgba(255,255,255,.7); --gl-edge: #dbe5f2; --gl-rim: rgba(255,255,255,0); --gl-drop: rgba(0,0,0,0); --gl-pill: #ffffff;
+  --gl: rgba(219,229,243,.6); --gl-edge: #d3dfef; --gl-rim: rgba(255,255,255,0); --gl-drop: rgba(0,0,0,0); --gl-pill: #ffffff;
   --chrome-bg: rgba(242,247,255,.8);
   --grid: #edf2fa; --axis: #c2cfe2; --dot: #d6e0ee;
   --s1: #2563eb; --s2: #7fb0f5; --s3: #4f46e5; --s4: #0ea5e9; --s5: #8b9cf6; --s6: #1e3a8a; --s7: #6d74e8; --s0: #a3afc2;
@@ -55,7 +55,12 @@ a { color: var(--accent-ink); }
 .tabs { display: flex; gap: 2px; margin: 7px 0 7px auto; padding: 3px; align-items: stretch; border-radius: 999px; }
 .tab { border: 0; background: transparent; padding: 0 14px; border-radius: 999px; transition: background .2s; color: var(--text-2); cursor: pointer; font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 7px; white-space: nowrap; position: relative; }
 .tab:hover { color: var(--text); }
-.tab.on { color: var(--text); font-weight: 600; background: var(--gl-pill); box-shadow: inset 0 1px 0 var(--gl-rim); }
+.tab.on { color: var(--text); font-weight: 600; }
+/* the active-tab pill slides between tabs; each view eases in when it opens */
+.tabs { position: relative; }
+.tab { position: relative; z-index: 1; }
+.tabpill { position: absolute; top: 3px; bottom: 3px; left: 0; width: 0; border-radius: 999px; background: var(--gl-pill); box-shadow: inset 0 1px 0 var(--gl-rim), 0 1px 3px rgba(0,0,0,.12); z-index: 0; pointer-events: none; transition: transform .38s cubic-bezier(.3,.8,.25,1), width .38s cubic-bezier(.3,.8,.25,1); }
+.tabpill.instant { transition: none; }
 .tab .badge { min-width: 19px; height: 17px; border-radius: 999px; padding: 0 5px; font-size: 11px; font-weight: 700; display: inline-grid; place-items: center; background: var(--crit); color: #fff; font-variant-numeric: tabular-nums; }
 .tab .badge.ok { background: var(--panel-3); color: var(--muted); }
 .actions { display: flex; gap: 6px; align-items: center; }
@@ -100,7 +105,8 @@ kbd { background: var(--panel-3); border-radius: 3px; padding: 0 5px; font-size:
 /* ---------- layout ---------- */
 main { padding: 22px; max-width: 1720px; margin: 0 auto; }
 .view { display: none; }
-.view.on { display: block; }
+.view.on { display: block; animation: viewin .34s cubic-bezier(.2,.75,.25,1) both; }
+@keyframes viewin { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 .grid { display: grid; gap: 14px; grid-template-columns: repeat(12, 1fr); }
 .c12 { grid-column: span 12; } .c8 { grid-column: span 8; } .c7 { grid-column: span 7; } .c6 { grid-column: span 6; } .c5 { grid-column: span 5; } .c4 { grid-column: span 4; } .c3 { grid-column: span 3; }
 @media (max-width: 1100px) { .c8, .c7, .c6, .c5, .c4 { grid-column: span 12; } .c3 { grid-column: span 6; } }
@@ -438,3 +444,14 @@ a.btn { text-decoration: none; color: var(--text); }
 .credit img { width: 28px; height: 28px; border-radius: 50%; box-shadow: 0 0 0 1px var(--line-2); }
 .credit b { color: var(--text); font-weight: 650; }
 .credit .src { color: var(--accent-ink); }
+
+/* findings report dialog */
+.rpt-lead { margin: 0 0 16px; color: var(--text-2); max-width: 70ch; }
+.rpt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.rpt-opt { text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: 16px; border: 1px solid var(--line-2); background: var(--panel-2); color: var(--text); cursor: pointer; transition: border-color .2s, background .2s; }
+.rpt-opt:hover { border-color: var(--btn); background: var(--hover); }
+.rpt-opt b { font-size: 15px; }
+.rpt-opt span { font-size: 13px; color: var(--muted); line-height: 1.4; }
+.rpt-opt:disabled { opacity: .6; cursor: progress; }
+.rpt-secret { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 13.5px; cursor: pointer; flex-wrap: wrap; }
+@media (max-width: 640px) { .rpt-grid { grid-template-columns: 1fr; } }

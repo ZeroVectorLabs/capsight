@@ -66,6 +66,10 @@ async def main():
             await page.click(f'.subnav [data-sub={sub}]')
             await page.evaluate('window.scrollTo(0, 0)')
             await shot('artifacts-' + name)
+        await tab('overview')
+        await page.click('#reportBtn')
+        await shot('report')
+        await page.click('#mclose')
         await page.close()
 
         # start-page images, at 1.5x for sharp edges: the laptop screen and three feature tiles

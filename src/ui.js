@@ -120,7 +120,7 @@ function setCapture(cap) {
 const VIEWS = ['overview', 'threats', 'conversations', 'packets', 'artifacts', 'insights'];
 function showApp(on) {
   $('#landing').classList.toggle('on', !on);
-  ['#filemeta', '#tabs', '#filterbar', '#openBtn2', '#strip', '#backBtn'].forEach(s => $(s).classList.toggle('hidden', !on));
+  ['#filemeta', '#tabs', '#filterbar', '#openBtn2', '#reportBtn', '#strip', '#backBtn'].forEach(s => $(s).classList.toggle('hidden', !on));
   if (!on) {
     $$('.view').forEach(x => x.classList.remove('on'));
     $('#modal').classList.remove('on'); untip();
@@ -135,11 +135,20 @@ function goHome() {
 }
 
 /* ---------- routing ---------- */
+function moveTabPill(instant) {
+  const p = $('#tabpill'), t = $('.tab.on'); if (!p || !t || !t.offsetWidth) return;
+  const first = !p.style.width || p.style.width === '0px';
+  p.classList.toggle('instant', !!instant || first);
+  p.style.width = t.offsetWidth + 'px';
+  p.style.transform = 'translateX(' + (t.offsetLeft) + 'px)';
+  if (instant || first) requestAnimationFrame(() => p.classList.remove('instant'));
+}
 function go(v) { if (location.hash.slice(1) !== v) { try { history.replaceState(history.state, '', '#' + v); } catch (e) { location.hash = v; } } route(v); }
 function route(v) {
   if (!S.cap) return;
   S.view = v;
   $$('.tab').forEach(t => t.classList.toggle('on', t.dataset.view === v));
+  moveTabPill();
   $$('.view').forEach(x => x.classList.toggle('on', x.id === 'view-' + v));
   const noFilter = v === 'threats' || v === 'artifacts';
   $('#filterbar').style.display = $('#strip').style.display = noFilter ? 'none' : '';
@@ -751,4 +760,5 @@ window.addEventListener('dragenter', e => { if (![...e.dataTransfer.types].inclu
 window.addEventListener('dragleave', () => { if (--dragN <= 0) { dragN = 0; $('#dzf').classList.remove('on'); $('#drop').classList.remove('over'); } });
 window.addEventListener('dragover', e => e.preventDefault());
 window.addEventListener('drop', e => { e.preventDefault(); dragN = 0; $('#dzf').classList.remove('on'); $('#drop').classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) openFile(f); });
-let rzT; window.addEventListener('resize', () => { clearTimeout(rzT); rzT = setTimeout(() => { drawSpecimen(); if (!S.cap) return; drawStrip(); drawSpecimen(); if (S.view === 'overview') { drawTimeline(); drawSizes(); } if (S.view === 'threats') drawSequence(); if (S.view === 'packets') drawRows(); }, 150); });
+let rzT; window.addEventListener('resize', () => { moveTabPill(true); clearTimeout(rzT); rzT = setTimeout(() => { drawSpecimen(); if (!S.cap) return; drawStrip(); drawSpecimen(); if (S.view === 'overview') { drawTimeline(); drawSizes(); } if (S.view === 'threats') drawSequence(); if (S.view === 'packets') drawRows(); }, 150); });
+if (document.fonts) document.fonts.ready.then(() => moveTabPill(true));
