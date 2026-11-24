@@ -9,7 +9,7 @@ import pathlib
 R = str(pathlib.Path(__file__).resolve().parent.parent) + '/'
 W, H = 1200, 630
 BG = (6, 17, 31)
-CYAN = (34, 211, 238)
+CYAN = (138, 184, 255)
 WHITE = (238, 244, 250)
 MUTED = (140, 160, 185)
 
@@ -68,14 +68,14 @@ card.paste(fade, (0, 0), fade)
 d = ImageDraw.Draw(card)
 logo = Image.open(R + 'assets/logo-128.png').convert('RGBA').resize((72, 72), Image.LANCZOS)
 card.paste(logo, (64, 64), logo)
-d.text((150, 74), 'Capsight', font=font('archivo.woff2', 46, 700, 100), fill=WHITE)
+d.text((150, 74), 'Capsight', font=font('dmsans.woff2', 44, 700), fill=WHITE)
 
-h = font('archivo.woff2', 64, 800, 90)
+h = font('dmsans.woff2', 60, 700)
 d.text((64, 196), 'Open a capture.', font=h, fill=WHITE)
 d.text((64, 268), 'Find the attack', font=h, fill=CYAN)
 d.text((64, 340), 'in it.', font=h, fill=CYAN)
 
-b = font('archivo.woff2', 26, 450, 100)
+b = font('dmsans.woff2', 25, 400)
 y = 440
 for line in ['PCAP analyzer with MITRE ATT&CK', 'detections, attack flow and', 'file & credential extraction.']:
     d.text((64, y), line, font=b, fill=MUTED)
