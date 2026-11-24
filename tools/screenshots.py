@@ -1,7 +1,7 @@
 """Retake the README screenshots and the start-page app images from dist/capsight.html.
 
 Usage: python3 tools/screenshots.py   (needs Python Playwright with Chromium, and Pillow)
-Writes docs/screenshots/*.png and assets/shot-{dark,light}.webp. Run `npm run build` again
+Writes docs/screenshots/*.png and the start-page images assets/shot-*.webp and assets/tile-*.webp. Run `npm run build` again
 afterwards so the new start-page images are embedded in the bundle.
 """
 import asyncio, io, os, pathlib
@@ -39,9 +39,6 @@ async def main():
         for t in ('light', 'dark'):
             await theme(t)
             await shot('overview' if t == 'dark' else 'overview-light')
-            png = await page.screenshot()
-            Image.open(io.BytesIO(png)).convert('RGB').resize((1200, 750), Image.LANCZOS) \
-                .save(ROOT / 'assets' / f'shot-{t}.webp', quality=80, method=6)
 
         await tab('threats')
         await shot('threats')
@@ -69,6 +66,35 @@ async def main():
             await page.click(f'.subnav [data-sub={sub}]')
             await page.evaluate('window.scrollTo(0, 0)')
             await shot('artifacts-' + name)
+        await page.close()
+
+        # start-page images, at 1.5x for sharp edges: the laptop screen and three feature tiles
+        page = await browser.new_page(viewport={'width': 1440, 'height': 900}, device_scale_factor=1.5)
+        await page.goto((ROOT / 'dist' / 'capsight.html').as_uri())
+        await page.click('#demoBtn')
+        await page.wait_for_selector('#view-overview.on', timeout=20000)
+
+        async def save(name, box=None, size=None):
+            await page.wait_for_timeout(800)
+            im = Image.open(io.BytesIO(await page.screenshot())).convert('RGB')
+            if box:
+                im = im.crop(tuple(int(v * 1.5) for v in box))
+            if size:
+                im = im.resize(size, Image.LANCZOS)
+            im.save(ROOT / 'assets' / f'{name}.webp', quality=76, method=6)
+
+        for t in ('dark', 'light'):
+            await theme(t)
+            await tab('overview')
+            await save(f'shot-{t}', size=(1800, 1125))
+            await tab('threats')
+            await page.evaluate("const c = document.querySelector('#seq').closest('.card'); window.scrollTo(0, c.getBoundingClientRect().top + window.scrollY - 150)")
+            await save(f'tile-flow-{t}', (0, 0, 1100, 640))
+            await tab('conversations')
+            await page.wait_for_timeout(1200)
+            await save(f'tile-map-{t}', (14, 176, 1114, 776))
+            await tab('artifacts')
+            await save(f'tile-files-{t}', (0, 52, 1100, 652))
         await browser.close()
     print('screenshots updated')
 

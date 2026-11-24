@@ -6,7 +6,7 @@ Notable changes to Capsight, newest first.
 
 - **New name:** Deepacket is now Capsight, with a new logo. The site moved to https://zerovectorlabs.github.io/capsight/ and the offline file is now `dist/capsight.html`.
 - **New look:** a calm blue palette across the app and charts, soft glass buttons, tabs and filter bar, and the DM Sans typeface.
-- **New start page:** headline, buttons and key numbers beside a live screenshot of the app; click the screenshot to open the sample attack.
+- **New start page:** a clean, Apple-style page with the app shown on a laptop, feature tiles with real screenshots, and the key numbers from the sample. Black in the dark theme, soft blue in the light theme. Click the laptop to open the sample attack.
 - Exported files are now named `capsight_*` instead of `deepacket_*`.
 - `tools/screenshots.py` retakes the README screenshots and the start-page images.
 

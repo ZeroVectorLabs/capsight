@@ -58,38 +58,44 @@
 
 <main>
   <section id="landing" class="on">
-    <div class="glow g1" aria-hidden="true"></div><div class="glow g2" aria-hidden="true"></div>
-    <div class="hero">
-      <div>
-        <a class="glass badge" href="https://github.com/ZeroVectorLabs/capsight" target="_blank" rel="noopener"><i></i>Free and open source · MIT</a>
-        <h1>Open a capture.<br><em>Find the attack in it.</em></h1>
-        <p class="lead">Drop in a .pcap or .pcapng and Capsight rebuilds the intrusion step by step against MITRE ATT&amp;CK, maps who talked to whom, and pulls out the files and credentials. It all runs in this browser tab.</p>
-        <div class="row">
-          <button class="btn primary lg" id="openBtn">Choose a capture file</button>
-          <button class="btn lg" id="demoBtn">Open the sample attack</button>
-        </div>
-        <p class="fine">Or drop a file anywhere on this page. Nothing is uploaded.</p>
-        <div class="hstats">
-          <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/></svg><b>25</b><span>attack steps in the sample</span></div>
-          <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="10" cy="18" r="2.5"/><path d="M8.3 7l7.3.7M7 8.3l2.2 7.4M16.5 10l-5 6"/></svg><b>9</b><span>ATT&amp;CK tactics mapped</span></div>
-          <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><b>0 bytes</b><span>uploaded anywhere</span></div>
-        </div>
+    <div class="lhero">
+      <h1>Capsight</h1>
+      <p class="ltag">Find the attack in any packet capture.</p>
+      <div class="lcta"><button class="pbtn fill" id="openBtn">Choose a capture file</button><button class="pbtn line" id="demoBtn">Try the sample attack</button></div>
+      <div class="mac" data-demo title="Open the sample attack">
+        <div class="screen"><img class="d" src="/*IMG:shot-dark*/" alt="Capsight showing the sample capture: 25 security detections and traffic over time"><img class="l" src="/*IMG:shot-light*/" alt="Capsight showing the sample capture: 25 security detections and traffic over time"></div>
+        <div class="base" aria-hidden="true"></div>
       </div>
-      <div class="hshot">
-        <div class="glass win" id="heroShot" title="Open the sample attack"><div class="dots" aria-hidden="true"><i></i><i></i><i></i></div><img class="dark" src="/*SHOTDARK*/" alt="Capsight overview of the sample capture: 25 security detections and traffic over time"><img class="light" src="/*SHOTLIGHT*/" alt=""></div>
-        <div class="glass float f1"><b>25</b><span><b>security detections</b><br><span>8 critical · 8 high · 9 medium</span></span></div>
-        <div class="glass float f2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Runs 100% in your browser</div>
-      </div>
+      <p class="lnote">Or drop a .pcap or .pcapng anywhere on this page. Nothing is uploaded.</p>
     </div>
-    <div class="specimen">
-      <div class="frame" id="specimen" title="Open the sample attack"><canvas id="speccv"></canvas><div class="ld" id="specld">Decoding the sample capture…</div>
-        <div class="cap"><span id="speccap">The sample capture</span><span id="speclg"></span></div></div>
+
+    <div class="lstate">
+      <h2>Drop in a capture. Get the whole story.</h2>
+      <p>Capsight decodes every packet in a .pcap or .pcapng, flags the scans, exploits and shells, and lays them out in the order they happened. <b>It all runs in your browser, so the capture never leaves your computer.</b></p>
     </div>
-    <div class="uses">
-      <div><h4>Traffic</h4><p>Throughput by protocol over time, top talkers, services and packet sizes. Every chart follows the time window and filter you set.</p></div>
-      <div><h4>Threats</h4><p>Scans, brute force, web exploits, reverse shells, beaconing, DNS tunnelling, exfiltration, ARP spoofing and floods, ordered into an attack flow.</p></div>
-      <div><h4>Network map</h4><p>A network diagram with the internet above your local network, device boxes for every host and attack paths as numbered arrows.</p></div>
-      <div><h4>Packets</h4><p>A virtualized packet list that stays responsive on large captures, with a linked protocol tree and hex view, and full TCP stream reassembly.</p></div>
+
+    <div class="ltiles">
+      <article class="ltile wide"><div class="ltxt"><h3>Every step of the attack, in order.</h3><p>Each detection is mapped to MITRE ATT&amp;CK and drawn as a timeline of who did what to whom.</p></div>
+        <div class="lpic"><img class="d" src="/*IMG:tile-flow-dark*/" alt="Attack flow: numbered steps from the attacker to the compromised server" loading="lazy"><img class="l" src="/*IMG:tile-flow-light*/" alt="Attack flow: numbered steps from the attacker to the compromised server" loading="lazy"></div></article>
+      <article class="ltile"><div class="ltxt"><h3>See who talked to whom.</h3><p>A map of every host, with the attacker’s path drawn on it.</p></div>
+        <div class="lpic"><img class="d" src="/*IMG:tile-map-dark*/" alt="Network map of the sample capture" loading="lazy"><img class="l" src="/*IMG:tile-map-light*/" alt="Network map of the sample capture" loading="lazy"></div></article>
+      <article class="ltile"><div class="ltxt"><h3>Files and passwords, recovered.</h3><p>Downloads, uploads and cleartext logins pulled straight from the traffic.</p></div>
+        <div class="lpic"><img class="d" src="/*IMG:tile-files-dark*/" alt="Recovered files with hashes" loading="lazy"><img class="l" src="/*IMG:tile-files-light*/" alt="Recovered files with hashes" loading="lazy"></div></article>
+      <article class="ltile short"><div class="lhuge">0 bytes<small>uploaded. Capsight is one file that runs in your browser, even offline.</small></div></article>
+      <article class="ltile short"><div class="ltxt"><h3>Free. Open source.</h3><p>MIT licensed, with every line of code on GitHub.</p></div>
+        <div class="lcta left"><a class="pbtn fill" href="https://github.com/ZeroVectorLabs/capsight" target="_blank" rel="noopener">View on GitHub</a></div></article>
+    </div>
+
+    <div class="lnums" aria-label="In the sample capture">
+      <div><b>25</b><span>attack steps found in the sample capture</span></div>
+      <div><b>9</b><span>MITRE ATT&amp;CK tactics mapped</span></div>
+      <div><b>1 file</b><span>No install, no account, no server</span></div>
+    </div>
+
+    <div class="lend">
+      <h2>Try it on a real attack.</h2>
+      <p>Open the sample capture, or drop in your own.</p>
+      <div class="lcta"><button class="pbtn fill" data-open>Choose a capture file</button><button class="pbtn line" data-demo>Try the sample attack</button></div>
     </div>
   </section>
 

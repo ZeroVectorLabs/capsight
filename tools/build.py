@@ -12,8 +12,8 @@ def ff(name, file, w, extra=''):
 fonts = ff('DM Sans','dmsans.woff2','100 1000') + ff('IBM Plex Mono','plex400.woff2','400') + ff('IBM Plex Mono','plex500.woff2','500')
 logo = lambda n: 'data:image/png;base64,' + base64.b64encode((ROOT / 'assets' / f'logo-{n}.png').read_bytes()).decode()
 html = html.replace('/*FONTS*/', fonts).replace('/*LOGO64*/', logo(64)).replace('/*LOGO256*/', logo(256)).replace('/*ZV64*/', 'data:image/png;base64,' + base64.b64encode((ROOT / 'assets' / 'zerovector-64.png').read_bytes()).decode())
-shot = lambda n: 'data:image/webp;base64,' + base64.b64encode((ROOT / 'assets' / f'shot-{n}.webp').read_bytes()).decode()
-html = html.replace('/*SHOTDARK*/', shot('dark')).replace('/*SHOTLIGHT*/', shot('light'))
+import re
+html = re.sub(r'/\*IMG:([\w-]+)\*/', lambda m: 'data:image/webp;base64,' + base64.b64encode((ROOT / 'assets' / (m.group(1) + '.webp')).read_bytes()).decode(), html)
 html = html.replace('/*CSS*/', (src/'style.css').read_text()).replace('/*JS*/', js).replace('/*DEMO*/', demo)
 
 def _split(doc):
