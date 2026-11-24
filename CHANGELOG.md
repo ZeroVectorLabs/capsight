@@ -4,7 +4,7 @@ Notable changes to Capsight, newest first.
 
 ## 3.0.0 (2026-11-24)
 
-- **New demo video:** a 65-second tour of Capsight 3.0.0 (`docs/media/capsight_demo.mp4`).
+- **New demo video:** a 52-second launch film of Capsight 3.0.0 (`docs/media/capsight_demo.mp4`).
 - The file name in the top bar no longer runs under the tabs on narrower windows.
 - **Clear filter:** one button in the filter bar removes the filter text, every chip and the selected time window.
 - **Findings report:** a Report button downloads a write-up of the capture as PDF, web page, Word (.docx) or Markdown, with the summary, every detection in ATT&CK order, hosts, indicators, recovered files and credentials. Passwords are masked unless you choose to include them.
