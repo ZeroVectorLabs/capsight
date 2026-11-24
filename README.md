@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <b>Open a capture. Find the attack in it.</b><br>
+  <b>Open a capture. See what really happened.</b><br>
   A packet-capture analyzer that runs entirely in your browser: traffic analytics, a network diagram,
   threat detection mapped to MITRE ATT&amp;CK, attack-flow reconstruction, and extraction of files,
   credentials and indicators.
