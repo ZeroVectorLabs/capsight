@@ -51,7 +51,8 @@ a { color: var(--accent-ink); }
 .filemeta { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--muted); font-size: 12.5px; padding-left: 18px; border-left: 1px solid var(--line); margin: 12px 0; }
 .filemeta .fname { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px; }
 .pill { display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px; border-radius: 3px; background: var(--panel-3); color: var(--text-2); font-size: 11.5px; white-space: nowrap; }
-.filemeta .pill { background: transparent; padding: 0; color: var(--muted); }
+.filemeta .pill { background: transparent; padding: 0; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; display: block; }
+.filemeta { overflow: hidden; flex: 0 1 auto; }
 .tabs { display: flex; gap: 2px; margin: 7px 0 7px auto; padding: 3px; align-items: stretch; border-radius: 999px; }
 .tab { border: 0; background: transparent; padding: 0 14px; border-radius: 999px; transition: background .2s; color: var(--text-2); cursor: pointer; font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 7px; white-space: nowrap; position: relative; }
 .tab:hover { color: var(--text); }
@@ -455,3 +456,4 @@ a.btn { text-decoration: none; color: var(--text); }
 .rpt-opt:disabled { opacity: .6; cursor: progress; }
 .rpt-secret { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 13.5px; cursor: pointer; flex-wrap: wrap; }
 @media (max-width: 640px) { .rpt-grid { grid-template-columns: 1fr; } }
+@media (max-width: 1600px) { .filemeta .pill { display: none; } }

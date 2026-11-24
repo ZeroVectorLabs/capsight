@@ -24,7 +24,7 @@
   &nbsp;·&nbsp;
   <a href="https://zerovectorlabs.github.io/capsight/attack_scenario.pcap">Download the sample attack capture</a>
   &nbsp;·&nbsp;
-  <a href="docs/media/deepacket_demo.mp4">Watch the 75-second demo</a>
+  <a href="docs/media/capsight_demo.mp4">Watch the 65-second demo</a>
 </p>
 
 <p align="center">
