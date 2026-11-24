@@ -1,4 +1,4 @@
-/* ===================== Capture strip (header navigator + landing specimen) ===================== */
+/* ===================== Capture strip (header navigator) and sample pre-decode ===================== */
 function paintStrip(cv, cap, idx, order, opt) {
   const r = cv.getBoundingClientRect(); const W = r.width, H = r.height; if (!W) return null;
   const dpr = window.devicePixelRatio || 1; cv.width = W * dpr; cv.height = H * dpr;
@@ -67,25 +67,16 @@ function drawStrip() {
   cv.addEventListener('dblclick', () => { if (S.chips.time) setChip('time', null); });
 })();
 
-/* landing specimen: the bundled sample capture drawn as a strip */
+/* decode the bundled sample in the background so "Try the sample attack" opens instantly */
 async function prepSpecimen() {
   try {
     const b64 = $('#demo-data').textContent.trim();
     const bin = atob(b64); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
     S.demoCap = await loadCapture(await gunzip(u8), 'attack_scenario.pcap');
     drawSpecimen();
-  } catch (e) { $('#specld').textContent = 'Could not decode the sample: ' + e.message; }
+  } catch (e) { console.warn('Could not decode the sample: ' + e.message); }
 }
-function drawSpecimen() {
-  const cap = S.demoCap; if (!cap || !$('#landing').classList.contains('on')) return;
-  const A = aggregate(cap, null);
-  const order = [...A.protos.values()].sort((a, b) => b.p - a.p).map(p => p.name);
-  $('#specld').style.display = 'none';
-  paintStrip($('#speccv'), cap, null, order, { flags: true, colW: 5 });
-  const step = cap.dur / Math.max(10, Math.floor($('#speccv').getBoundingClientRect().width / 5));
-  $('#speccap').innerHTML = `<b>The sample capture.</b> ${fmtNum(cap.pk.length)} packets over ${fmtDur(cap.dur)}. Each column is ${fmtDur(step)} of traffic, coloured by its busiest protocol. Red markers are the ${cap.threats.length} attack steps Capsight finds in it.`;
-  $('#speclg').innerHTML = order.slice(0, 5).map((p, i) => `<span class="lg" style="cursor:default"><i style="background:var(--s${i + 1})"></i>${esc(p)}</span>`).join('');
-}
-$('#specimen').addEventListener('click', loadDemo);
-$('#heroShot').addEventListener('click', loadDemo);
+function drawSpecimen() {}
+document.querySelectorAll('[data-demo]').forEach(b => b.addEventListener('click', loadDemo));
+document.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => $('#file').click()));
 prepSpecimen();
