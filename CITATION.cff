@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use Capsight in research or teaching material, please cite it as below."
+title: "Capsight: a browser-based packet-capture analyzer"
+type: software
+authors:
+  - name: "ZeroVector"
+    website: "https://github.com/ZeroVectorLabs"
+repository-code: "https://github.com/ZeroVectorLabs/capsight"
+url: "https://zerovectorlabs.github.io/capsight/"
+license: MIT
+version: 3.0.0
+date-released: "2026-11-24"
+keywords:
+  - pcap
+  - network forensics
+  - incident response
+  - MITRE ATT&CK

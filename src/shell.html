@@ -4,34 +4,36 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" type="image/png" href="/*LOGO64*/">
-<title>Deepacket — PCAP Visualizer & Threat Analyzer</title>
+<title>Capsight — PCAP Visualizer & Threat Analyzer</title>
 <meta name="description" content="Free, open-source PCAP analyzer that runs in your browser. Drop a .pcap or .pcapng to get a network map, threat detection mapped to MITRE ATT&amp;CK, attack-flow reconstruction, and extracted files, credentials and IOCs. Nothing is uploaded.">
 <meta name="keywords" content="pcap analyzer, pcapng, online pcap viewer, wireshark alternative, network forensics, DFIR, incident response, MITRE ATT&amp;CK, threat detection, packet analysis">
 <meta name="theme-color" content="#06111f">
-<link rel="canonical" href="https://zerovectorlabs.github.io/deepacket/">
+<link rel="canonical" href="https://zerovectorlabs.github.io/capsight/">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="Deepacket">
-<meta property="og:title" content="Deepacket — Open a capture. Find the attack in it.">
+<meta property="og:site_name" content="Capsight">
+<meta property="og:title" content="Capsight — Open a capture. See what really happened.">
 <meta property="og:description" content="Free in-browser PCAP analyzer: network map, MITRE ATT&amp;CK detections, attack-flow reconstruction, file and credential extraction. Your capture never leaves your machine.">
-<meta property="og:url" content="https://zerovectorlabs.github.io/deepacket/">
-<meta property="og:image" content="https://zerovectorlabs.github.io/deepacket/og.png">
+<meta property="og:url" content="https://zerovectorlabs.github.io/capsight/">
+<meta property="og:image" content="https://zerovectorlabs.github.io/capsight/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Deepacket overview of a capture with 25 security detections">
+<meta property="og:image:alt" content="Capsight overview of a capture with 25 security detections">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Deepacket — Open a capture. Find the attack in it.">
+<meta name="twitter:title" content="Capsight — Open a capture. See what really happened.">
 <meta name="twitter:description" content="Free in-browser PCAP analyzer with MITRE ATT&amp;CK detections, attack-flow reconstruction and artifact extraction. Nothing is uploaded.">
-<meta name="twitter:image" content="https://zerovectorlabs.github.io/deepacket/og.png">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Deepacket","applicationCategory":"SecurityApplication","operatingSystem":"Any (web browser)","url":"https://zerovectorlabs.github.io/deepacket/","description":"Browser-based PCAP analyzer with threat detection mapped to MITRE ATT&CK, attack-flow reconstruction and extraction of files, credentials and indicators.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/ZeroVectorLabs/deepacket"}</script>
+<meta name="twitter:image" content="https://zerovectorlabs.github.io/capsight/og.png">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Capsight","applicationCategory":"SecurityApplication","operatingSystem":"Any (web browser)","url":"https://zerovectorlabs.github.io/capsight/","description":"Browser-based PCAP analyzer with threat detection mapped to MITRE ATT&CK, attack-flow reconstruction and extraction of files, credentials and indicators.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/ZeroVectorLabs/capsight"}</script>
 <style>/*FONTS*/
 /*CSS*/</style>
 </head>
 <body>
 <header class="chrome">
 <div class="topbar">
-  <div class="brand" id="brand"><img src="/*LOGO64*/" alt="" width="32" height="32">Deepacket</div>
+  <button class="btn ghost back hidden" id="backBtn" title="Back to the start page to open another capture (Alt+←)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span>Back</span></button>
+  <div class="brand" id="brand"><img src="/*LOGO64*/" alt="" width="32" height="32">Capsight</div>
   <div class="filemeta hidden" id="filemeta"></div>
   <nav class="tabs hidden" id="tabs">
+    <span class="tabpill" id="tabpill" aria-hidden="true"></span>
     <button class="tab" data-view="overview">Overview</button>
     <button class="tab" data-view="threats">Threats <span class="badge ok" id="tbadge">0</span></button>
     <button class="tab" data-view="conversations">Network map</button>
@@ -40,8 +42,9 @@
     <button class="tab" data-view="insights">DNS, TLS &amp; HTTP</button>
   </nav>
   <div class="actions">
+    <button class="btn hidden" id="reportBtn" title="Download a findings report as PDF, web page, Word or Markdown"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>Report</button>
     <button class="btn hidden" id="openBtn2">Open file</button>
-    <a class="btn ghost ghlink" href="https://github.com/ZeroVectorLabs/deepacket" target="_blank" rel="noopener" title="Star or watch Deepacket on GitHub to get new releases"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span>Star on GitHub</span></a>
+    <a class="btn ghost ghlink" href="https://github.com/ZeroVectorLabs/capsight" target="_blank" rel="noopener" title="Star or watch Capsight on GitHub to get new releases"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span>Star on GitHub</span></a>
     <button class="btn icon ghost" id="themeBtn" title="Switch light or dark"></button>
   </div>
 </div>
@@ -51,34 +54,45 @@
     <input id="fin" spellcheck="false" autocomplete="off" placeholder="Filter packets, e.g.  ip:10.0.0.20  port:443  dns  !arp  len>1000  syn or rst"><kbd>/</kbd></div>
   <div class="chips" id="chips"></div>
   <span class="fcount" id="fcount"></span>
+  <button class="btn sm hidden" id="clearAll" title="Remove every filter, chip and time window (Esc in the filter box clears the text)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>Clear filter</button>
   <button class="btn sm ghost" id="helpBtn">Filter syntax</button>
 </div>
 </header>
 
 <main>
   <section id="landing" class="on">
-    <div class="hero">
-      <div><img class="mark" src="/*LOGO256*/" alt="Deepacket logo">
-      <h1>Open a capture.<br>Find the attack in it.</h1></div>
-      <div>
-        <p class="lead">Deepacket decodes .pcap and .pcapng files in this browser tab, charts the traffic, maps who talked to whom, and reconstructs any intrusion step by step against MITRE ATT&amp;CK.</p>
-        <div class="row">
-          <button class="btn primary lg" id="openBtn">Choose a capture file</button>
-          <button class="btn lg" id="demoBtn">Open the sample attack</button>
-        </div>
-        <p class="fine">Or drop a file anywhere on this page. Nothing is uploaded.</p>
-        <p class="fine">Free and open source. <a href="https://github.com/ZeroVectorLabs/deepacket" target="_blank" rel="noopener">Star or watch it on GitHub</a> to hear about new detections and releases.</p>
+    <div class="lhero">
+      <img class="lmark" src="/*LOGO256*/" alt="Capsight">
+      <h1>Open a capture. See what really happened.</h1>
+      <div class="lcta"><button class="pbtn fill" id="openBtn">Choose a capture file</button><button class="pbtn line" id="demoBtn">Try the sample attack</button></div>
+      <div class="mac" data-demo title="Open the sample attack">
+        <div class="screen"><img class="d" src="/*IMG:shot-dark*/" alt="Capsight showing the sample capture: 25 security detections and traffic over time"><img class="l" src="/*IMG:shot-light*/" alt="Capsight showing the sample capture: 25 security detections and traffic over time"></div>
+        <div class="base" aria-hidden="true"></div>
       </div>
+      <p class="lnote">Or drop a .pcap or .pcapng anywhere on this page. Nothing is uploaded.</p>
     </div>
-    <div class="specimen">
-      <div class="frame" id="specimen" title="Open the sample attack"><canvas id="speccv"></canvas><div class="ld" id="specld">Decoding the sample capture…</div>
-        <div class="cap"><span id="speccap">The sample capture</span><span id="speclg"></span></div></div>
+
+    <div class="lstate">
+      <h2>Drop in a capture. Get the whole story.</h2>
+      <p>Capsight decodes every packet in a .pcap or .pcapng, flags the scans, exploits and shells, and lays them out in the order they happened. <b>It all runs in your browser, so the capture never leaves your computer.</b></p>
     </div>
-    <div class="uses">
-      <div><h4>Traffic</h4><p>Throughput by protocol over time, top talkers, services and packet sizes. Every chart follows the time window and filter you set.</p></div>
-      <div><h4>Threats</h4><p>Scans, brute force, web exploits, reverse shells, beaconing, DNS tunnelling, exfiltration, ARP spoofing and floods, ordered into an attack flow.</p></div>
-      <div><h4>Network map</h4><p>A network diagram with the internet above your local network, device boxes for every host and attack paths as numbered arrows.</p></div>
-      <div><h4>Packets</h4><p>A virtualized packet list that stays responsive on large captures, with a linked protocol tree and hex view, and full TCP stream reassembly.</p></div>
+
+    <div class="ltiles">
+      <article class="ltile wide"><div class="ltxt"><h3>Every step of the attack, in order.</h3><p>Each detection is mapped to MITRE ATT&amp;CK and drawn as a timeline of who did what to whom.</p></div>
+        <div class="lpic"><img class="d" src="/*IMG:tile-flow-dark*/" alt="Attack flow: numbered steps from the attacker to the compromised server" loading="lazy"><img class="l" src="/*IMG:tile-flow-light*/" alt="Attack flow: numbered steps from the attacker to the compromised server" loading="lazy"></div></article>
+      <article class="ltile"><div class="ltxt"><h3>See who talked to whom.</h3><p>A map of every host, with the attacker’s path drawn on it.</p></div>
+        <div class="lpic"><img class="d" src="/*IMG:tile-map-dark*/" alt="Network map of the sample capture" loading="lazy"><img class="l" src="/*IMG:tile-map-light*/" alt="Network map of the sample capture" loading="lazy"></div></article>
+      <article class="ltile"><div class="ltxt"><h3>Files and passwords, recovered.</h3><p>Downloads, uploads and cleartext logins pulled straight from the traffic.</p></div>
+        <div class="lpic"><img class="d" src="/*IMG:tile-files-dark*/" alt="Recovered files with hashes" loading="lazy"><img class="l" src="/*IMG:tile-files-light*/" alt="Recovered files with hashes" loading="lazy"></div></article>
+      <article class="ltile short"><div class="lhuge">0 bytes<small>uploaded. Capsight is one file that runs in your browser, even offline.</small></div></article>
+      <article class="ltile short"><div class="ltxt"><h3>Free. Open source.</h3><p>MIT licensed, with every line of code on GitHub.</p></div>
+        <div class="lcta left"><a class="pbtn fill" href="https://github.com/ZeroVectorLabs/capsight" target="_blank" rel="noopener">View on GitHub</a></div></article>
+    </div>
+
+    <div class="lend">
+      <h2>Try it on a real attack.</h2>
+      <p>Open the sample capture, or drop in your own.</p>
+      <div class="lcta"><button class="pbtn fill" data-open>Choose a capture file</button><button class="pbtn line" data-demo>Try the sample attack</button></div>
     </div>
   </section>
 
@@ -88,7 +102,7 @@
   <section class="view" id="view-packets"></section>
   <section class="view" id="view-artifacts"></section>
   <section class="view" id="view-insights"></section>
-  <footer class="credit"><a href="https://github.com/ZeroVectorLabs" target="_blank" rel="noopener"><img src="/*ZV64*/" alt="" width="28" height="28"><span>Deepacket is made by <b>ZeroVector</b></span></a><a class="src" href="https://github.com/ZeroVectorLabs/deepacket" target="_blank" rel="noopener">Source on GitHub</a></footer>
+  <footer class="credit"><a href="https://github.com/ZeroVectorLabs" target="_blank" rel="noopener"><img src="/*ZV64*/" alt="" width="28" height="28"><span>Capsight is made by <b>ZeroVector</b></span></a><a class="src" href="https://github.com/ZeroVectorLabs/capsight" target="_blank" rel="noopener">Source on GitHub</a></footer>
 </main>
 
 <div id="tooltip"></div>

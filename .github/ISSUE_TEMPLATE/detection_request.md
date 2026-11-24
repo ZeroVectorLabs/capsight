@@ -1,6 +1,6 @@
 ---
 name: Detection request
-about: An attack or technique Deepacket should flag
+about: An attack or technique Capsight should flag
 title: "[Detection] "
 labels: enhancement
 ---
