@@ -72,8 +72,8 @@ d.text((150, 74), 'Capsight', font=font('dmsans.woff2', 44, 700), fill=WHITE)
 
 h = font('dmsans.woff2', 60, 700)
 d.text((64, 196), 'Open a capture.', font=h, fill=WHITE)
-d.text((64, 268), 'Find the attack', font=h, fill=CYAN)
-d.text((64, 340), 'in it.', font=h, fill=CYAN)
+d.text((64, 268), 'See what really', font=h, fill=CYAN)
+d.text((64, 340), 'happened.', font=h, fill=CYAN)
 
 b = font('dmsans.woff2', 25, 400)
 y = 440
