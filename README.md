@@ -163,6 +163,8 @@ Keyboard: `/` focuses the filter, arrow keys and Page Up/Down move through the p
 
 Terms are combined with AND. Use `or` between groups and prefix a term with `!` to negate it. Operators: `:` `==` `!=` `>` `<` `>=` `<=`.
 
+**Clear filter**, next to the packet count, removes the filter text, every chip and the selected time window in one click.
+
 | Filter | Matches |
 |---|---|
 | `tcp` `udp` `dns` `tls` `http` `arp` `smb` … | Protocol name |

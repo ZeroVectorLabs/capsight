@@ -2,8 +2,9 @@
 
 Notable changes to Capsight, newest first.
 
-## 2.0.0 (2026-11-24)
+## 3.0.0 (2026-11-24)
 
+- **Clear filter:** one button in the filter bar removes the filter text, every chip and the selected time window.
 - **Findings report:** a Report button downloads a write-up of the capture as PDF, web page, Word (.docx) or Markdown, with the summary, every detection in ATT&CK order, hosts, indicators, recovered files and credentials. Passwords are masked unless you choose to include them.
 - **Smoother tabs:** the active-tab highlight slides between tabs, and each view eases in when it opens.
 - **Headline:** "Open a capture. See what really happened." replaces a line that promised an attack in every capture.
