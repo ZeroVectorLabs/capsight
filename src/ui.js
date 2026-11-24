@@ -120,7 +120,7 @@ function setCapture(cap) {
 const VIEWS = ['overview', 'threats', 'conversations', 'packets', 'artifacts', 'insights'];
 function showApp(on) {
   $('#landing').classList.toggle('on', !on);
-  ['#filemeta', '#tabs', '#filterbar', '#openBtn2', '#strip', '#backBtn'].forEach(s => $(s).classList.toggle('hidden', !on));
+  ['#filemeta', '#tabs', '#filterbar', '#openBtn2', '#reportBtn', '#strip', '#backBtn'].forEach(s => $(s).classList.toggle('hidden', !on));
   if (!on) {
     $$('.view').forEach(x => x.classList.remove('on'));
     $('#modal').classList.remove('on'); untip();
@@ -135,11 +135,20 @@ function goHome() {
 }
 
 /* ---------- routing ---------- */
+function moveTabPill(instant) {
+  const p = $('#tabpill'), t = $('.tab.on'); if (!p || !t || !t.offsetWidth) return;
+  const first = !p.style.width || p.style.width === '0px';
+  p.classList.toggle('instant', !!instant || first);
+  p.style.width = t.offsetWidth + 'px';
+  p.style.transform = 'translateX(' + (t.offsetLeft) + 'px)';
+  if (instant || first) requestAnimationFrame(() => p.classList.remove('instant'));
+}
 function go(v) { if (location.hash.slice(1) !== v) { try { history.replaceState(history.state, '', '#' + v); } catch (e) { location.hash = v; } } route(v); }
 function route(v) {
   if (!S.cap) return;
   S.view = v;
   $$('.tab').forEach(t => t.classList.toggle('on', t.dataset.view === v));
+  moveTabPill();
   $$('.view').forEach(x => x.classList.toggle('on', x.id === 'view-' + v));
   const noFilter = v === 'threats' || v === 'artifacts';
   $('#filterbar').style.display = $('#strip').style.display = noFilter ? 'none' : '';
@@ -254,6 +263,7 @@ function applyFilter() {
   const n = idx ? idx.length : cap.pk.length;
   $('#fcount').innerHTML = idx ? `<b>${fmtNum(n)}</b> of ${fmtNum(cap.pk.length)} packets` : `<b>${fmtNum(n)}</b> packets`;
   renderChips();
+  updateClearAll();
   drawStrip();
   S.dirty = { overview: 1, conversations: 1, packets: 1, insights: 1, threats: S.dirty.threats ?? 1, artifacts: S.dirty.artifacts ?? 1 };
   if (S.sel >= 0 && idx && !idx.includes(S.sel)) S.sel = -1;
@@ -269,13 +279,22 @@ function renderChips() {
 }
 $('#chips').addEventListener('click', e => { const b = e.target.closest('[data-chip]'); if (!b) return; S.chips[b.dataset.chip] = null; applyFilter(); });
 function setChip(k, v) { S.chips[k] = v; applyFilter(); }
+function filterActive() { const C = S.chips; return !!(S.fn || C.time || C.host || C.proto || C.ev || $('#fin').value.trim()); }
+function updateClearAll() { $('#clearAll').classList.toggle('hidden', !filterActive()); }
+function clearFilters() {
+  clearTimeout(finT);
+  S.chips = { time: null, host: null, proto: null, ev: null }; S.fn = null; S.expr = '';
+  $('#fin').value = ''; $('#fx').classList.remove('bad');
+  applyFilter();
+}
+$('#clearAll').onclick = clearFilters;
 let finT;
 $('#fin').addEventListener('input', e => {
   clearTimeout(finT);
   finT = setTimeout(() => {
     const v = e.target.value.trim();
     try { S.fn = v ? compileFilter(v) : null; S.expr = v; $('#fx').classList.remove('bad'); applyFilter(); }
-    catch (err) { $('#fx').classList.add('bad'); }
+    catch (err) { $('#fx').classList.add('bad'); updateClearAll(); }
   }, 220);
 });
 $('#fin').addEventListener('keydown', e => { if (e.key === 'Escape') { e.target.value = ''; e.target.dispatchEvent(new Event('input')); e.target.blur(); } });
@@ -751,4 +770,5 @@ window.addEventListener('dragenter', e => { if (![...e.dataTransfer.types].inclu
 window.addEventListener('dragleave', () => { if (--dragN <= 0) { dragN = 0; $('#dzf').classList.remove('on'); $('#drop').classList.remove('over'); } });
 window.addEventListener('dragover', e => e.preventDefault());
 window.addEventListener('drop', e => { e.preventDefault(); dragN = 0; $('#dzf').classList.remove('on'); $('#drop').classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) openFile(f); });
-let rzT; window.addEventListener('resize', () => { clearTimeout(rzT); rzT = setTimeout(() => { drawSpecimen(); if (!S.cap) return; drawStrip(); drawSpecimen(); if (S.view === 'overview') { drawTimeline(); drawSizes(); } if (S.view === 'threats') drawSequence(); if (S.view === 'packets') drawRows(); }, 150); });
+let rzT; window.addEventListener('resize', () => { moveTabPill(true); clearTimeout(rzT); rzT = setTimeout(() => { drawSpecimen(); if (!S.cap) return; drawStrip(); drawSpecimen(); if (S.view === 'overview') { drawTimeline(); drawSizes(); } if (S.view === 'threats') drawSequence(); if (S.view === 'packets') drawRows(); }, 150); });
+if (document.fonts) document.fonts.ready.then(() => moveTabPill(true));

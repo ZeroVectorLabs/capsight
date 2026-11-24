@@ -8,7 +8,8 @@ authors:
 repository-code: "https://github.com/ZeroVectorLabs/capsight"
 url: "https://zerovectorlabs.github.io/capsight/"
 license: MIT
-version: 1.0.1
+version: 3.0.0
+date-released: "2026-11-24"
 keywords:
   - pcap
   - network forensics
