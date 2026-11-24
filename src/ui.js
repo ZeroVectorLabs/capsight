@@ -103,20 +103,39 @@ function setCapture(cap) {
   { const ab = $('#abadge'); ab.textContent = cap.art ? ab.textContent : '…'; ab.classList.add('ok'); }
   S.dirty = {}; setTimeout(ensureArt, 60);
   S.roles = new Map(); if (cap.flow) cap.flow.lanes.forEach(l => S.roles.set(l.id, l.role));
-  $('#landing').classList.remove('on');
-  ['#filemeta', '#tabs', '#filterbar', '#openBtn2', '#strip'].forEach(s => $(s).classList.remove('hidden'));
+  showApp(true);
   $('#filemeta').innerHTML = `<span class="fname" title="${esc(cap.name)}">${esc(cap.name)}</span><span class="pill">${fmtNum(cap.pk.length)} packets, ${fmtBytes(cap.size)}, ${fmtDur(cap.dur)}</span>`;
   const n = cap.threats.length, crit = cap.threats.filter(d => d.sev === 'critical').length;
   const b = $('#tbadge'); b.textContent = n; b.className = 'badge' + (n ? '' : ' ok'); b.style.background = n && !crit ? 'var(--high)' : '';
   const h = location.hash.slice(1);
-  S.view = ['overview', 'threats', 'conversations', 'packets', 'artifacts', 'insights'].includes(h) ? h : 'overview';
+  S.view = VIEWS.includes(h) ? h : 'overview';
+  // opening a capture from the start page adds a history entry, so Back (ours or the browser's) returns there
+  if (!VIEWS.includes(h)) { try { history.pushState({ home: 1 }, '', '#' + S.view); S.fromHome = true; } catch (e) {} }
   $$('.view').forEach(x => x.classList.toggle('on', x.id === 'view-' + S.view));
   applyFilter();
   go(S.view);
 }
 
+/* ---------- start page and back ---------- */
+const VIEWS = ['overview', 'threats', 'conversations', 'packets', 'artifacts', 'insights'];
+function showApp(on) {
+  $('#landing').classList.toggle('on', !on);
+  ['#filemeta', '#tabs', '#filterbar', '#openBtn2', '#strip', '#backBtn'].forEach(s => $(s).classList.toggle('hidden', !on));
+  if (!on) {
+    $$('.view').forEach(x => x.classList.remove('on'));
+    $('#modal').classList.remove('on'); untip();
+    if (S.graph) S.graph.active = false;
+    S.home = true; scrollTo(0, 0); requestAnimationFrame(drawSpecimen);
+  } else S.home = false;
+}
+function goHome() {
+  if (S.fromHome && history.state && history.state.home) { history.back(); return; }  // pops to the start page entry
+  try { history.pushState(null, '', location.pathname + location.search); } catch (e) {}
+  showApp(false);
+}
+
 /* ---------- routing ---------- */
-function go(v) { if (location.hash.slice(1) !== v) { try { history.replaceState(null, '', '#' + v); } catch (e) { location.hash = v; } } route(v); }
+function go(v) { if (location.hash.slice(1) !== v) { try { history.replaceState(history.state, '', '#' + v); } catch (e) { location.hash = v; } } route(v); }
 function route(v) {
   if (!S.cap) return;
   S.view = v;
@@ -129,7 +148,12 @@ function route(v) {
   render();
   if (v === 'conversations' && S.graph) S.graph.kick();
 }
-window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h && h !== S.view) route(h); });
+window.addEventListener('hashchange', () => {
+  const h = location.hash.slice(1);
+  if (!VIEWS.includes(h)) { if (S.cap && !S.home) { S.fromHome = false; showApp(false); } return; }
+  if (S.cap && S.home) { showApp(true); S.view = null; }  // browser Forward back into the capture
+  if (h !== S.view) route(h);
+});
 function render() {
   const v = S.view;
   if (!S.dirty[v]) return;
@@ -696,7 +720,8 @@ $('#openBtn').onclick = $('#openBtn2').onclick = () => $('#file').click();
 $('#file').onchange = e => { openFile(e.target.files[0]); e.target.value = ''; };
 $('#demoBtn').onclick = loadDemo;
 $('#themeBtn').onclick = () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
-$('#brand').onclick = () => { if (S.cap) go('overview'); };
+$('#brand').onclick = () => { if (S.cap && !S.home) go('overview'); };
+$('#backBtn').onclick = goHome;
 $$('.tab').forEach(t => t.onclick = () => go(t.dataset.view));
 $('#mclose').onclick = () => $('#modal').classList.remove('on');
 $('#modal').onclick = e => { if (e.target.id === 'modal') $('#modal').classList.remove('on'); };
