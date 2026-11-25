@@ -821,3 +821,13 @@ a.btn { text-decoration: none; color: var(--text); }
 .aipill { background: var(--ink-bg) !important; color: var(--ink-fg) !important; }
 .pai { margin-left: 4px; font: 700 9.5px/1 "IBM Plex Mono", monospace; padding: 2px 3px; border-radius: 2px; background: var(--ink-bg); color: var(--ink-fg); vertical-align: 1px; }
 @media (max-width: 640px) { .aialert { flex-wrap: wrap; padding: 14px; gap: 10px; } .aialert .btn.primary { width: 100%; justify-content: center; } }
+.aia-q { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 8px 0 0; font-size: 13.5px; }
+.aia-q dt { opacity: .7; } .aia-q dd { margin: 0; } .aia-q b { font-weight: 700; }
+.aialert.soft { background: var(--panel); color: var(--text); border: 1px solid var(--line-2); }
+.aialert.soft .aibadge { background: var(--ink-bg); color: var(--ink-fg); }
+.aialert.soft .aia-signs span { border-color: var(--line-2); }
+.aialert.soft .aia-signs span.st { background: var(--hover); border-color: var(--text-2); }
+.aialert.soft .btn.primary { background: var(--ink-bg); color: var(--ink-fg); border-color: var(--ink-bg); }
+.aimal { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.aimal.y { color: var(--crit); }
+@media (max-width: 640px) { .aia-q { grid-template-columns: 1fr; } .aia-q dt { margin-top: 4px; } }

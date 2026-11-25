@@ -663,6 +663,7 @@ function detectThreats(cap) {
 // No single sign proves an AI is driving: scripts are fast too. So each sign carries a weight
 // and its own packets, "strong" signs are ones ordinary scanners rarely show, and the verdict
 // needs at least one strong sign. The evidence is listed sign by sign so an analyst can check it.
+const AI_TYPES = new Set(['ai', 'aiuse', 'aitool', 'aiframework', 'llmcalls', 'oast', 'cleartext']);
 const LLM_API = /(^|\.)(api\.openai\.com|api\.anthropic\.com|generativelanguage\.googleapis\.com|aiplatform\.googleapis\.com|api\.x\.ai|api\.mistral\.ai|api\.groq\.com|openrouter\.ai|api\.deepseek\.com|api\.together\.xyz|api\.cohere\.(ai|com)|api\.perplexity\.ai|api\.fireworks\.ai|openai\.azure\.com|bedrock-runtime\.[\w-]+\.amazonaws\.com|api\.moonshot\.cn|dashscope\.aliyuncs\.com|ollama\.com)$/i;
 const AGENT_UA = /(python-httpx|python-requests|aiohttp|Go-http-client|node-fetch|axios|undici|okhttp|libwww-perl|httpie|langchain|llama[-_ ]?index|crewai|autogen|browser-use|openai|anthropic|HeadlessChrome|Playwright|puppeteer)/i;
 const API_MAP = /(swagger(\.json|\/v\d+\/swagger\.json|-ui)?|openapi\.(json|ya?ml)|api-docs|\.well-known\/(openid-configuration|ai-plugin\.json|mcp|security\.txt)|graphql|robots\.txt|sitemap\.xml|llms\.txt)(\?|$)/i;
@@ -829,17 +830,40 @@ function aiAssess(cap, D, add) {
     const score = signs.reduce((a, x) => a + x.weight, 0), strong = signs.filter(x => x.strong).length;
     if (!strong || score < 3) continue;
     if (signs.length === 1 && signs[0].key === 'framework') continue; // the framework detection already says it all
-    const onHost = isPrivate(src) && !!L; // an agent running on one of our own machines
-    const sure = onHost || F.length > 0 || (score >= 5 && strong >= 2);
+    // Two separate questions: is AI involved, and is this host attacking anything?
+    // Calling an AI service is normal; it only matters when the same host is part of the attack.
+    const attacks = D.filter(d => d.src === src && !AI_TYPES.has(d.type));
+    const malicious = attacks.length > 0 || F.length > 0;
+    const onHost = isPrivate(src) && !!L;
+    let conf = F.length ? 'confirmed' : score >= 5 && strong >= 2 ? 'likely' : 'possible';
+    if (onHost && !F.length) {
+      if (!attacks.length) {
+        add({ type: 'aiuse', title: 'AI service used by ' + src, sev: 'low', stage: 'resource', tech: 'T1588.007', techName: 'Obtain Capabilities: Artificial Intelligence', src, dst: [...L.names].join(', '), count: L.ev.length,
+          summary: src + ' called ' + [...L.names].join(', ') + '. On its own this is normal: apps and people use AI services every day. Nothing in this capture shows ' + src + ' attacking anything, so it is listed for context only.',
+          details: [['AI services', [...L.names].join('\n')], ['Packets', L.ev.length], ['Malicious', 'Not shown: no attack comes from this host']], ev: L.ev });
+        continue;
+      }
+      const w0 = Math.min(...attacks.map(d => d.t0)) - 120, w1 = Math.max(...attacks.map(d => d.t1)) + 120;
+      const during = L.ev.some(i => pk[i].t >= w0 && pk[i].t <= w1);
+      conf = during && strong >= 2 ? 'likely' : 'possible';
+    }
+    const sure = conf !== 'possible';
     const ev = [...new Set(signs.flatMap(x => x.ev))].sort((a, b) => a - b);
     const dst = onHost ? ([...cap.llmIps].find(([, n]) => L.names.has(n)) || [[...L.names][0]])[0] : mine.length ? [...new Set(mine.map(d => d.dst))].filter(isIp)[0] || mine[0].dst : '';
-    add({ type: 'ai', title: F.length && !onHost ? 'AI-driven attack by ' + F.map(o => o.tool.split(' (')[0]).filter((v, i, a) => a.indexOf(v) === i).join(', ') + ': ' + signs.length + ' sign' + (signs.length > 1 ? 's' : '') : onHost ? 'AI agent at work on compromised host ' + src : (sure ? 'AI-driven attack' : 'Possibly AI-driven attack') + ': ' + signs.length + ' sign' + (signs.length > 1 ? 's' : '') + ' of an AI agent', sev: onHost ? 'high' : sure ? 'critical' : 'medium', stage: 'resource', tech: 'T1588.007', techName: 'Obtain Capabilities: Artificial Intelligence', src, dst, count: signs.length, ai: { score, strong, sure },
+    const tools = F.map(o => o.tool).filter((v, i, a) => a.indexOf(v) === i).join(', ');
+    const nsig = signs.length + ' sign' + (signs.length > 1 ? 's' : '');
+    const title = conf === 'confirmed' ? 'AI-driven attack by ' + tools + ': ' + nsig : onHost ? 'AI agent ' + (conf === 'likely' ? 'likely' : 'possibly') + ' at work on ' + src : (conf === 'likely' ? 'Likely AI-driven attack: ' : 'Possible AI involvement: ') + nsig;
+    const sev = conf === 'confirmed' ? 'critical' : conf === 'likely' ? (malicious ? (onHost ? 'high' : 'critical') : 'medium') : (malicious ? 'medium' : 'low');
+    const atk = attacks.slice(0, 4).map(d => d.title);
+    const confText = { confirmed: 'confirmed: the traffic names ' + tools, likely: 'likely: ' + strong + ' strong signs', possible: 'possible: ' + strong + ' strong sign' + (strong === 1 ? '' : 's') + ', which ordinary automation or legitimate AI use can also produce' }[conf];
+    add({ type: 'ai', title, sev, stage: 'resource', tech: 'T1588.007', techName: 'Obtain Capabilities: Artificial Intelligence', src, dst, count: signs.length,
+      ai: { score, strong, sure, conf, malicious, attacks: atk },
       t0: pk[ev[0]].t, t1: pk[ev[ev.length - 1]].t, signs,
-      summary: (onHost ? src + ' was part of the attack and kept calling an AI model API (' + [...L.names].join(', ') + '): an AI agent is likely running on it, deciding the next steps. ' : sure ? src + ' behaves like an AI agent, not a person or a plain scanner. ' : src + ' shows some signs of an AI agent. ') + 'The signs: ' + signs.map(x => x.name[0].toLowerCase() + x.name.slice(1)).join('; ') + '. Each one is listed with its packets below.',
-      details: signs.map(x => [x.name + (x.strong ? ' (strong)' : ''), x.detail]).concat([['Score', score + ' (' + strong + ' strong sign' + (strong === 1 ? '' : 's') + '; a verdict needs at least one strong sign)']]), ev });
+      summary: 'AI involvement is ' + confText + '. ' + (malicious ? 'Malicious: yes, ' + src + ' is also behind ' + (atk.length ? atk.join(', ') : 'an AI attack framework') + (attacks.length > 4 ? ' and more' : '') + '.' : 'Malicious: not shown, no attack in this capture comes from ' + src + '.') + ' The signs: ' + signs.map(x => x.name[0].toLowerCase() + x.name.slice(1)).join('; ') + '. Each one is listed with its packets below.',
+      details: [['AI involvement', conf[0].toUpperCase() + conf.slice(1)], ['Malicious', malicious ? 'Yes: ' + (atk.join('; ') || 'AI attack framework') : 'Not shown']].concat(signs.map(x => [x.name + (x.strong ? ' (strong)' : ''), x.detail]), [['Score', score + ' (' + strong + ' strong sign' + (strong === 1 ? '' : 's') + '; a verdict needs at least one strong sign)']]), ev });
   }
-  // regular calls to an AI model API are the agent thinking, not a C2 check-in
-  for (const d of D) if (d.type === 'beacon' && cap.llmIps.has(d.dst)) { const nm = cap.llmIps.get(d.dst); d.type = 'llmcalls'; d.title = 'Regular calls to an AI model API (' + nm + ')'; d.sev = 'high'; d.stage = 'resource'; d.tech = 'T1588.007'; d.techName = 'Obtain Capabilities: Artificial Intelligence'; d.summary = d.src + ' called ' + nm + ' ' + d.count + ' times at a steady rhythm while the attack ran: the pattern of an agent asking a model for its next step.'; }
+  // regular calls to an AI model API are AI use, not a C2 check-in; they only matter on a host that is attacking
+  for (const d of D) if (d.type === 'beacon' && cap.llmIps.has(d.dst)) { const nm = cap.llmIps.get(d.dst), bad = D.some(x => x.src === d.src && !AI_TYPES.has(x.type) && x.type !== 'beacon'); d.type = 'llmcalls'; d.title = 'Regular calls to an AI model API (' + nm + ')'; d.sev = bad ? 'medium' : 'low'; d.stage = 'resource'; d.tech = 'T1588.007'; d.techName = 'Obtain Capabilities: Artificial Intelligence'; d.summary = d.src + ' called ' + nm + ' ' + d.count + ' times at a steady rhythm. ' + (bad ? 'The same host is part of the attack, so this may be an agent asking a model for its next step.' : 'On its own that is normal AI use; nothing shows this host attacking.'); }
 }
 /* ===================== Attack flow model ===================== */
 function buildAttackFlow(cap, D) {
