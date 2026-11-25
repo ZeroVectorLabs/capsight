@@ -592,5 +592,6 @@ a.btn { text-decoration: none; color: var(--text); }
 .cp-ico:hover { border-color: var(--btn); color: var(--text); }
 .cp-ico.danger:hover { border-color: var(--crit); color: var(--crit); }
 .cp-empty { margin: 4px 0 0; }
+.cp-old { border: 1px solid color-mix(in srgb, var(--med) 45%, transparent); }
 @media (max-width: 820px) { .cp-row, .cp-bars { grid-template-columns: 1fr; } .cp-stats { grid-template-columns: 1fr 1fr; } .cp-item { grid-template-columns: minmax(0, 1fr) auto; } .cp-item > .cp-muted, .cp-num { display: none; } }
 @media (prefers-reduced-motion: reduce) { .cp-conn i, .cp-rec i { animation: none; } }
