@@ -4,6 +4,8 @@ Notable changes to Capsight, newest first.
 
 ## 4.0.0 (2026-11-25)
 
+- **Story tab:** the attack retold in plain words: a short version, who's who, a chapter for each stage with **Show me** links to the packets, things also noticed, how it ended and what to do now, with **Copy the story**. Reachable from the tab bar, the Overview banner and the Threats summary.
+
 - **AI involved? Malicious?** The AI notice and detections now answer these separately, with a confidence of Confirmed, Likely or Possible. Calling an AI service on its own is no longer an alarm: it is a low-severity "AI service used" note unless the same host is part of the attack, and regular model calls are rated by whether the host is attacking.
 
 - **AI attack framework fingerprints:** traffic that names an AI attack framework (ARTEX and its forks, CyberStrikeAI, HexStrike-AI, LuaN1aoAgent, PentAGI, Agent Zero, RedAmon, Xalgorix, Pentest Swarm AI, PentestGPT) is raised as **AI attack framework**, and its sender is labelled **AI-driven attacker**. AI coding agents (Claude Code, Qwen Code, Codex CLI, Gemini CLI, Aider) count as a sign on hosts that are part of an attack, and out-of-band callback services (dnslog, oast, interact.sh, webhook.site) get their own detection. Checked against the 8 sample captures published with the ARTEX detection packs.

@@ -58,7 +58,7 @@ function setTheme(t) {
   document.documentElement.dataset.theme = t;
   try { localStorage.setItem('pl-theme', t); } catch (e) {}
   $('#themeBtn').innerHTML = SVGI(t === 'dark' ? IC.sun : IC.moon);
-  if (S.cap) { S.dirty = { overview: 1, conversations: 1, insights: 1, threats: 1, packets: 1, artifacts: 1 }; render(); drawStrip(); if (S.graph) S.graph.kick(); }
+  if (S.cap) { S.dirty = { overview: 1, story: 1, conversations: 1, insights: 1, threats: 1, packets: 1, artifacts: 1 }; render(); drawStrip(); if (S.graph) S.graph.kick(); }
   drawSpecimen();
 }
 (function initTheme() { let t = null; try { t = localStorage.getItem('pl-theme'); } catch (e) {} if (!t) t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; setTheme(t); })();
@@ -123,7 +123,7 @@ function setCapture(cap) {
 }
 
 /* ---------- start page and back ---------- */
-const VIEWS = ['overview', 'threats', 'conversations', 'packets', 'artifacts', 'insights'];
+const VIEWS = ['overview', 'story', 'threats', 'conversations', 'packets', 'artifacts', 'insights'];
 function showApp(on) {
   if (typeof capHideQuiet === 'function') capHideQuiet();
   $('#landing').classList.toggle('on', !on);
@@ -157,7 +157,7 @@ function route(v) {
   $$('.tab').forEach(t => t.classList.toggle('on', t.dataset.view === v));
   moveTabPill();
   $$('.view').forEach(x => x.classList.toggle('on', x.id === 'view-' + v));
-  const noFilter = v === 'threats' || v === 'artifacts';
+  const noFilter = v === 'threats' || v === 'artifacts' || v === 'story';
   $('#filterbar').style.display = $('#strip').style.display = noFilter ? 'none' : '';
   if (!noFilter) requestAnimationFrame(drawStrip);
   if (S.graph) S.graph.active = v === 'conversations';
@@ -175,7 +175,7 @@ function render() {
   const v = S.view;
   if (!S.dirty[v]) return;
   S.dirty[v] = 0;
-  ({ overview: renderOverview, threats: renderThreats, conversations: renderConversations, packets: renderPackets, artifacts: renderArtifacts, insights: renderInsights })[v]();
+  ({ overview: renderOverview, story: renderStory, threats: renderThreats, conversations: renderConversations, packets: renderPackets, artifacts: renderArtifacts, insights: renderInsights })[v]();
 }
 
 /* ---------- filtering ---------- */
@@ -378,7 +378,7 @@ function applyFilter() {
   renderChips();
   updateClearAll();
   drawStrip();
-  S.dirty = { overview: 1, conversations: 1, packets: 1, insights: 1, threats: S.dirty.threats ?? 1, artifacts: S.dirty.artifacts ?? 1 };
+  S.dirty = { overview: 1, conversations: 1, packets: 1, insights: 1, threats: S.dirty.threats ?? 1, artifacts: S.dirty.artifacts ?? 1, story: S.dirty.story ?? 1 };
   if (S.sel >= 0 && idx && !idx.includes(S.sel)) S.sel = -1;
   render();
 }
@@ -424,7 +424,7 @@ function renderOverview() {
   const [bv, bu] = fmtBytes(A.bytes).split(' ');
   const [rv, ru] = fmtBits(A.bytes * 8 / dur).split(' ');
   const internal = [...A.hosts.keys()].filter(h => isIp(h) && isPrivate(h)).length;
-  const banner = D.length ? `<div class="tbanner" id="tban"><div class="ic">${SVGI(SEV_ICON.critical, 26)}</div><div><h4>${D.length} security detection${D.length > 1 ? 's' : ''}: ${['critical', 'high', 'medium', 'low'].map(s => [s, D.filter(d => d.sev === s).length]).filter(x => x[1]).map(x => x[1] + ' ' + x[0]).join(', ')}</h4><p>${esc(cap.flow ? cap.flow.story : '')}</p></div><div class="mini">${cap.flow.stages.map(s => `<i title="${esc(s.name)}${s.n ? ': ' + s.n : ': not seen'}" style="${s.n ? 'background:var(' + SEV_VAR[Object.keys(SEV_RANK).find(k => SEV_RANK[k] === s.sev)] + ')' : ''}"></i>`).join('')}<span class="btn sm">Open attack flow</span></div></div>`
+  const banner = D.length ? `<div class="tbanner" id="tban"><div class="ic">${SVGI(SEV_ICON.critical, 26)}</div><div><h4>${D.length} security detection${D.length > 1 ? 's' : ''}: ${['critical', 'high', 'medium', 'low'].map(s => [s, D.filter(d => d.sev === s).length]).filter(x => x[1]).map(x => x[1] + ' ' + x[0]).join(', ')}</h4><p>${esc(cap.flow ? cap.flow.story : '')}</p></div><div class="mini">${cap.flow.stages.map(s => `<i title="${esc(s.name)}${s.n ? ': ' + s.n : ': not seen'}" style="${s.n ? 'background:var(' + SEV_VAR[Object.keys(SEV_RANK).find(k => SEV_RANK[k] === s.sev)] + ')' : ''}"></i>`).join('')}<span class="btn sm">Open attack flow</span><span class="btn sm" data-gostory>Read the story</span></div></div>`
     : `<div class="tbanner clean"><div class="ic">${SVGI(IC.check, 22)}</div><div><h4>No threats detected</h4><p>Checked for scans, brute force, web exploits, shells, beaconing, tunneling, exfiltration, spoofing and floods.</p></div></div>`;
   el.innerHTML = `${aiAlertHtml(cap)}
   <div class="kpis">
@@ -445,7 +445,7 @@ function renderOverview() {
     <div class="card c4"><div class="card-h"><h3>Packet sizes</h3><span class="sub">bytes on the wire</span></div><div class="card-b"><div class="chart" id="sizes"></div></div></div>
     <div class="card c4"><div class="card-h"><h3>TCP control flags</h3><span class="sub">packets</span></div><div class="card-b"><div class="bars" id="flagbars"></div></div></div>
   </div>`;
-  if (D.length) $('#tban').onclick = () => go('threats');
+  if (D.length) $('#tban').onclick = e => go(e.target.closest('[data-gostory]') ? 'story' : 'threats');
   wireAiAlert(el);
   $$('#tlseg button').forEach(b => { b.classList.toggle('on', b.dataset.m === S.tl); b.onclick = () => { S.tl = b.dataset.m; $$('#tlseg button').forEach(x => x.classList.toggle('on', x === b)); drawTimeline(); }; });
   $$('#pmseg button').forEach(b => { b.classList.toggle('on', b.dataset.m === S.pm); b.onclick = () => { S.pm = b.dataset.m; $$('#pmseg button').forEach(x => x.classList.toggle('on', x === b)); drawProtoBars(); }; });
@@ -661,7 +661,7 @@ function renderThreats() {
   el.innerHTML = `${aiAlertHtml(cap)}
   <div class="thero">
     <div><div class="big">${D.length}</div><div class="lbl">detections</div></div>
-    <div class="story"><h2>What happened</h2>${story}
+    <div class="story"><h2>What happened <button class="st-link" data-gostory>Read it as a story</button></h2>${story}
       <div class="sevs">${['critical', 'high', 'medium', 'low'].filter(cnt).map(s => `<button class="fbtn ${S.sevF === s ? 'on' : ''}" data-sev="${s}" style="padding:0;border:0;background:none">${sevBadge(s, cnt(s))}</button>`).join('')}</div></div>
   </div>
   <div style="margin-top:22px"><div class="card-h" style="padding:0 0 10px"><h3>Kill chain</h3><span class="sub">MITRE ATT&amp;CK tactics in attack order. Select one to narrow the list.</span></div>
@@ -672,7 +672,7 @@ function renderThreats() {
   $$('#view-threats [data-st]').forEach(x => x.onclick = () => { S.stage = S.stage === x.dataset.st ? null : x.dataset.st; renderThreats(); });
   $$('#view-threats [data-sev]').forEach(x => x.onclick = () => { S.sevF = S.sevF === x.dataset.sev ? null : x.dataset.sev; renderThreats(); });
   if ($('#clrf')) $('#clrf').onclick = () => { S.stage = null; S.sevF = null; renderThreats(); };
-  wireAiAlert(el); drawSequence();
+  $$('[data-gostory]', el).forEach(b => b.onclick = () => go('story')); wireAiAlert(el); drawSequence();
   drawDetections();
   if (S.tsel !== null) { const t = S.tsel; setTimeout(() => selectThreat(t, true), 60); }
 }

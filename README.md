@@ -47,6 +47,7 @@
   - [Findings report](#findings-report)
   - [Capture live traffic](#capture-live-traffic)
 - [How to work with it](#how-to-work-with-it)
+- [Story](#story)
 - [Filter syntax](#filter-syntax)
 - [Packet list](#packet-list)
 - [Detections](#detections)
@@ -164,6 +165,16 @@ A typical investigation:
 7. **Dig deeper with filters.** Use Wireshark display filters such as `ip.addr == 10.0.0.20 && !tls` or `http.response.code >= 400`, right-click any packet to filter on it, or type `threat` to see only evidence packets.
 
 Keyboard: `/` focuses the filter, arrow keys, Page Up/Down, Home and End move through the packet list, `Esc` closes dialogs. More shortcuts are listed under [Packet list](#packet-list).
+
+## Story
+
+The **Story** tab retells the capture in plain words, for anyone who needs to understand what happened without reading packets: a manager, a client, a colleague outside security.
+
+- **The short version:** a few sentences, in order: how the attacker got in, what it did inside, what left the network, and how long it took.
+- **Who's who:** every machine in the attack with a plain label (the attacker, taken over, the attacker's server, impostor device, AI service…) and what it did.
+- **Step by step:** one chapter per stage of the attack (scouting, breaking in, taking control, stealing the keys, moving to other machines, calling home, taking the data), each with its time and a **Show me** link to the packets behind every sentence.
+- **Also noticed:** risks that are not part of the attack, such as a colleague's password sent unencrypted.
+- **How it ended** and **What to do now**, with **Copy the story** to paste it into an email or a ticket.
 
 ## Filter syntax
 
