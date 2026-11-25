@@ -119,6 +119,7 @@ function setCapture(cap) {
 /* ---------- start page and back ---------- */
 const VIEWS = ['overview', 'threats', 'conversations', 'packets', 'artifacts', 'insights'];
 function showApp(on) {
+  if (typeof capHideQuiet === 'function') capHideQuiet();
   $('#landing').classList.toggle('on', !on);
   ['#filemeta', '#tabs', '#filterbar', '#openBtn2', '#reportBtn', '#strip', '#backBtn'].forEach(s => $(s).classList.toggle('hidden', !on));
   if (!on) {
@@ -159,6 +160,7 @@ function route(v) {
 }
 window.addEventListener('hashchange', () => {
   const h = location.hash.slice(1);
+  if (h === 'capture') return;  // the Capture page handles its own route (capture.js)
   if (!VIEWS.includes(h)) { if (S.cap && !S.home) { S.fromHome = false; showApp(false); } return; }
   if (S.cap && S.home) { showApp(true); S.view = null; }  // browser Forward back into the capture
   if (h !== S.view) route(h);
@@ -749,7 +751,7 @@ $('#file').onchange = e => { openFile(e.target.files[0]); e.target.value = ''; }
 $('#demoBtn').onclick = loadDemo;
 $('#themeBtn').onclick = () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 $('#brand').onclick = () => { if (S.cap && !S.home) go('overview'); };
-$('#backBtn').onclick = goHome;
+$('#backBtn').onclick = () => (typeof CP !== 'undefined' && CP.on ? leaveCapturePage() : goHome());
 $$('.tab').forEach(t => t.onclick = () => go(t.dataset.view));
 $('#mclose').onclick = () => $('#modal').classList.remove('on');
 $('#modal').onclick = e => { if (e.target.id === 'modal') $('#modal').classList.remove('on'); };

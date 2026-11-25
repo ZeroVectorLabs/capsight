@@ -21,8 +21,9 @@ async def main():
         await page.goto((ROOT / 'dist' / 'capsight.html').as_uri())
         # Capture live traffic: the dialog opens and offers the helper download when it isn't running
         await page.click('.lcta [data-capture] >> nth=0')
-        await page.wait_for_selector('#mbody .cap a[href$="capsight-capture.zip"]', timeout=8000)
-        await page.click('#mclose')
+        await page.wait_for_selector('#capture-page.on a[href$="capsight-capture.zip"]', timeout=8000)
+        await page.click('#backBtn')
+        await page.wait_for_selector('#landing.on', timeout=5000)
         await page.click('#demoBtn')
         await page.wait_for_selector('#view-overview.on', timeout=20000)
         for v in VIEWS:

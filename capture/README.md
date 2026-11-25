@@ -3,15 +3,25 @@
 Record network traffic from the port you choose and save it as a `.pcap` file, ready to open in
 [Capsight](https://zerovectorlabs.github.io/capsight/), Wireshark or tcpdump.
 
-It runs on your own computer only. The app opens in your browser at `http://127.0.0.1:47115`, and
-nothing is sent anywhere.
+It runs on your own computer only and nothing is sent anywhere. A web page can't read network ports,
+which is why this small helper has to run; Capsight's Capture page is its interface.
 
-## From Capsight
+## How it works with Capsight
 
-Click **Capture live traffic** on the Capsight start page (or **Capture** in the top bar). Capsight
-looks for this helper on port 47115 and opens it in a window. Record, click **Open in Capsight**, and
-the capture opens straight in the Capsight tab. If the helper isn't running, the same dialog has the
-download and the steps to start it.
+Capsight Capture has no window of its own. Start it once and leave it running; everything else happens
+on Capsight's **Capture** page (the **Capture live traffic** button on the start page, or **Capture** in
+the top bar, or https://zerovectorlabs.github.io/capsight/#capture). The page connects to this helper
+on `127.0.0.1:47115`, and:
+
+- shows what your computer can capture, with a fix for anything missing,
+- lets you choose the network port from a drop-down list, add a filter and a stop condition,
+- shows live packets, data, rate, a traffic graph, top protocols and busiest addresses,
+- saves each finished capture in your browser (IndexedDB) under **Saved captures**, where you can
+  open it, download the `.pcap` or delete it. Saved captures are removed after 1, 7 or 30 days, or
+  kept until you delete them. By default the helper's own copy is deleted once the browser has it;
+  turn on **Keep a copy on disk** to also keep `.pcap` files in `~/Captures`.
+
+Light and dark follow Capsight's theme switch.
 
 ## What it does
 
@@ -32,16 +42,15 @@ download and the steps to start it.
 
 - Listens on `127.0.0.1` only, and answers only requests addressed to `127.0.0.1` or `localhost`
   (no DNS rebinding).
-- Starting, stopping and downloading need a random key that only its own page has; other websites
-  can't drive it, and its page can't be framed.
-- A finished capture goes only to the Capsight tab that opened the window
-  (`https://zerovectorlabs.github.io`, or Capsight served from localhost while developing).
+- Only Capsight's page can use it: every request must come from `https://zerovectorlabs.github.io`
+  (or Capsight served from localhost while developing), which browsers enforce with CORS. Other
+  websites can't start a capture or read one.
 
 ## Start it
 
 **Mac:** open **Terminal**, type `bash ` (with a space), drag `Capsight Capture.command` from the
 unzipped folder into the Terminal window and press Return. It installs scapy once, asks for your Mac
-password, and opens the app in your browser.
+password, and opens Capsight's Capture page in your browser.
 
 If you double-click the file instead, macOS may say it "could not verify" the script, because it was
 downloaded and isn't signed by Apple. Starting it with `bash` as above avoids that. You can also allow
@@ -55,7 +64,7 @@ and allow it to run as administrator.
 
 ```bash
 python3 -m pip install scapy
-sudo python3 capsight_capture.py          # browser app
+sudo python3 capsight_capture.py          # runs in the background; use Capsight's Capture page
 sudo python3 capsight_capture.py --cli    # terminal only
 python3 capsight_capture.py --check       # just check what this computer can do
 ```
@@ -64,7 +73,7 @@ python3 capsight_capture.py --check       # just check what this computer can do
 
 | Option | What it does |
 |---|---|
-| `--cli` | Use the terminal instead of the browser |
+| `--cli` | Record from the terminal instead of Capsight |
 | `--check` | Only run the computer check |
 | `--list` | List the network interfaces |
 | `-i en0` | Capture on this interface without asking |
@@ -72,7 +81,8 @@ python3 capsight_capture.py --check       # just check what this computer can do
 | `-d 60` / `-c 5000` / `--max-mb 100` | Stop after seconds / packets / MB |
 | `--no-promisc` | Only traffic to and from this computer |
 | `-o ~/Desktop/pcaps` | Save folder |
-| `--port 47115` | Port for the browser app (Capsight looks for 47115) |
+| `--port 47115` | Port to listen on (Capsight looks for 47115) |
+| `--no-browser` | Don't open Capsight when it starts |
 
 Example: `sudo python3 capsight_capture.py -i en0 -f "port 53" -d 30` records 30 seconds of DNS on `en0`.
 
