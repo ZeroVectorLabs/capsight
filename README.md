@@ -197,7 +197,7 @@ The Packets tab works the way Wireshark does.
   - **Copy** the summary as text or CSV, a cell, the filter, or the bytes as a hex dump, a hex stream, printable text or an escaped string.
   - **Export** the packet's bytes or the packet as `.pcapng`.
 - **Right-click a field** in the packet details to filter on it, copy it or export its bytes. Double-click a field to apply it as a filter.
-- **Columns** sort when you click their heading. The **Time** column shows seconds since start, since the previous packet, time of day, UTC or epoch, and counts from your time references.
+- **Columns:** No., Time, Source, **Src port**, Destination, **Dst port**, Protocol, Length and Info. Right-click a port to filter on it (`tcp.dstport == 80`); right-click a heading to hide or show the port columns. Columns sort when you click their heading. The **Time** column shows seconds since start, since the previous packet, time of day, UTC or epoch, and counts from your time references.
 - **Colour rows** applies Wireshark's default colouring rules (TCP, UDP, HTTP, ARP, ICMP, SYN/FIN, RST and more).
 - **Go to** a packet number, **Find** a packet by text, hex bytes or display filter, and see counts of displayed, marked and ignored packets in the status bar.
 - **Export** the shown or marked packets as `.pcapng` (with your comments), or the packet list as CSV or text.
