@@ -108,7 +108,8 @@ function setCapture(cap) {
   const n = cap.threats.length, crit = cap.threats.filter(d => d.sev === 'critical').length;
   const b = $('#tbadge'); b.textContent = n; b.className = 'badge' + (n ? '' : ' ok'); b.style.background = n && !crit ? 'var(--high)' : '';
   // AI-driven attacks are called out everywhere: a marker on the Threats tab, a notice, and a tag on every evidence packet
-  cap.aiD = cap.threats.filter(d => d.type === 'ai' || d.type === 'aitool').sort((x, y) => (y.type === 'ai') - (x.type === 'ai') || (y.ai?.sure ? 1 : 0) - (x.ai?.sure ? 1 : 0));
+  const aiRank = d => d.type === 'ai' && d.ai.sure ? 0 : d.type === 'aiframework' ? 1 : d.type === 'ai' ? 2 : 3;
+  cap.aiD = cap.threats.filter(d => d.type === 'ai' || d.type === 'aitool' || d.type === 'aiframework').sort((x, y) => aiRank(x) - aiRank(y));
   cap.aiEv = new Map(); cap.aiD.forEach(d => (d.signs || [{ name: d.title, ev: d.ev }]).forEach(g => g.ev.forEach(i => { if (!cap.aiEv.has(i)) cap.aiEv.set(i, g.name); })));
   $('#aitab').classList.toggle('hidden', !cap.aiD.length);
   if (cap.aiD.length) setTimeout(() => toast(aiHeadline(cap) + '. Open Threats for the evidence.'), 700);
@@ -733,25 +734,30 @@ function drawSequence() {
 function aiHeadline(cap) {
   const d = cap.aiD[0]; if (!d) return '';
   if (d.type === 'aitool') return 'A tool written with AI was used in this capture';
-  if (d.title.startsWith('AI agent at work')) return 'An AI agent is at work on ' + d.src;
-  return (d.ai.sure ? 'AI-driven attack detected' : 'Possible AI-driven attack') + ' from ' + d.src;
+  if (d.type === 'aiframework') return 'AI attack framework detected: ' + d.title.replace('AI attack framework: ', '') + ' from ' + d.src;
+  const host = /^AI agent/.test(d.title);
+  return { confirmed: 'AI-driven attack from ' + d.src, likely: host ? 'AI agent likely at work on ' + d.src : 'Likely AI-driven attack from ' + d.src, possible: host ? 'AI agent possibly at work on ' + d.src : 'Possible AI involvement: ' + d.src }[d.ai.conf];
 }
 // the notice at the top of Overview and Threats
 function aiAlertHtml(cap) {
   if (!cap.aiD || !cap.aiD.length) return '';
-  const main = cap.aiD.find(d => d.type === 'ai') || cap.aiD[0];
-  const signs = main.signs ? main.signs : main.details.map(([k]) => ({ name: k.replace(/ \(strong\)$/, ''), strong: / \(strong\)$/.test(k) }));
+  const main = cap.aiD[0];
+  const signs = main.signs ? main.signs : main.type === 'aiframework' ? (main.details.find(([k]) => k === 'User-Agents') || ['', ''])[1].split('\n').map(u => ({ name: 'User-Agent: ' + u, strong: true })) : main.details.map(([k]) => ({ name: k.replace(/ \(strong\)$/, ''), strong: / \(strong\)$/.test(k) }));
   const others = cap.aiD.filter(d => d !== main);
-  return `<div class="aialert" data-aid="${main.id}"><span class="aibadge">AI</span><div class="aia-t"><h4>${esc(aiHeadline(cap))}</h4>
-    <p>${main.type === 'ai' ? esc(main.src) + ' shows ' + signs.length + ' sign' + (signs.length > 1 ? 's' : '') + ' of an AI agent, ' + main.ai.strong + ' of them strong' + (main.ai.sure ? '. It moves at machine speed and retries, so act quickly.' : '. Check the evidence before you decide.') : esc(main.summary)}</p>
+  const conf = main.type === 'aiframework' ? 'confirmed' : main.type === 'aitool' ? 'confirmed' : main.ai.conf;
+  const mal = main.type === 'aiframework' ? true : main.type === 'aitool' ? null : main.ai.malicious;
+  const confWhy = { confirmed: main.type === 'aitool' ? 'the file carries an AI assistant\'s marks' : 'the traffic names an AI attack tool', likely: 'several strong signs', possible: 'one strong sign; ordinary automation or legitimate AI use can look like this too' }[conf];
+  const malWhy = mal === true ? (main.ai && main.ai.attacks.length ? 'it is also behind: ' + main.ai.attacks.slice(0, 3).join('; ') : 'an attack tool was pointed at your hosts') : mal === false ? 'no attack in this capture comes from ' + main.src : 'check what the tool was used for';
+  return `<div class="aialert${conf === 'possible' ? ' soft' : ''}" data-aid="${main.id}"><span class="aibadge">AI</span><div class="aia-t"><h4>${esc(aiHeadline(cap))}</h4>
+    <dl class="aia-q"><dt>AI involved?</dt><dd><b>${conf[0].toUpperCase() + conf.slice(1)}</b>: ${esc(confWhy)}</dd><dt>Malicious?</dt><dd><b>${mal === true ? 'Yes' : mal === false ? 'Not shown' : 'Unclear'}</b>: ${esc(malWhy)}</dd></dl>
     <div class="aia-signs">${signs.map(g => `<span class="${g.strong ? 'st' : ''}">${esc(g.name)}</span>`).join('')}</div>
-    ${others.length ? `<p class="aia-more">Also: ${others.map(d => esc(d.title)).join(' · ')}</p>` : ''}</div><button class="btn primary sm" data-aiopen="${main.id}">See the evidence</button></div>`;
+    ${others.length ? `<p class="aia-more">Also: ${[...new Set(others.map(d => d.type === 'aiframework' ? d.title.replace('AI attack framework: ', '') + ' from ' + d.src : d.title))].map(esc).join(' · ')}</p>` : ''}</div><button class="btn primary sm" data-aiopen="${main.id}">See the evidence</button></div>`;
 }
 function wireAiAlert(el) { $$('[data-aiopen]', el).forEach(b => b.onclick = e => { e.stopPropagation(); S.tsel = +b.dataset.aiopen; S.dirty.threats = 1; go('threats'); }); }
 // the evidence behind an AI verdict: one row per sign, each with the packets that show it
 function aiSignsHtml(d) {
   const a = d.ai;
-  return `<div class="aibox"><div class="aihead"><span class="aibadge">AI</span><b>${a.sure ? 'AI-driven' : 'Possibly AI-driven'}</b><span class="hint">score ${a.score}, ${a.strong} strong sign${a.strong === 1 ? '' : 's'}</span></div>
+  return `<div class="aibox"><div class="aihead"><span class="aibadge">AI</span><b>AI involvement: ${a.conf}</b><span class="aimal ${a.malicious ? 'y' : ''}">Malicious: ${a.malicious ? 'yes' : 'not shown'}</span><span class="hint">score ${a.score}, ${a.strong} strong sign${a.strong === 1 ? '' : 's'}</span></div>
     <ol class="aisigns">${d.signs.map((g, k) => `<li><div class="ais-h"><b>${esc(g.name)}</b>${g.strong ? '<span class="aistrong">strong sign</span>' : ''}<span class="sp"></span><button class="btn sm" data-ais="${d.id}:${k}">${SVGI(IC.filter, 13)}Show ${fmtNum(g.ev.length)} packet${g.ev.length > 1 ? 's' : ''}</button></div><p>${esc(g.detail)}</p></li>`).join('')}</ol>
     <p class="hint aino">No single sign proves an AI is at the keyboard: fast scripts share some of them. Strong signs are ones ordinary scanners rarely show; a verdict needs at least one.</p></div>`;
 }
