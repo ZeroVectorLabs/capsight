@@ -213,6 +213,19 @@ The Packets tab works the way Wireshark does.
 | `Ctrl+.` / `Ctrl+,` | Next / previous packet in the same conversation |
 | `Shift+F10` or the menu key | Open the packet menu from the keyboard |
 
+### ARTEX-style AI attack sample
+
+[`samples/artex_ai_attack.pcap`](samples/artex_ai_attack.pcap) is a second synthetic capture, of the kind of AI-driven intrusion that public reporting on the ARTEX framework describes (November 2026). No public capture of a real ARTEX attack exists, so it is built from the reported behaviour, with invented addresses, names and tokens and no runnable code:
+
+- machine-speed recon that starts from the app's API map (`swagger.json`), then a port scan and endpoint fuzzing at a fixed 120 ms;
+- a web shell uploaded through an open file-upload endpoint and driven with `?cmd=`;
+- the same attack run replayed identically about 30 seconds later, and a "recheck loop" that polls the shell every 48 seconds;
+- cloud credentials taken from the Azure instance metadata service, then Azure management and storage access;
+- Active Directory recon over LDAP (with a cleartext bind), kerberoasting, an internal SMB/RDP/WinRM sweep, WinRM and SMB to the file server;
+- a tool download and a staged upload to an outside server.
+
+Open it with **Choose a capture file**. Regenerate it with `npm run sample:artex`.
+
 ## Detections
 
 | Area | What is detected | ATT&amp;CK |
@@ -263,6 +276,7 @@ npm test                # engine tests (parser, detections, artifacts)
 npm run build           # rebuild dist/capsight.html after editing src/
 npm run test:browser    # browser smoke test; needs `pip install playwright` and Chromium
 npm run sample          # regenerate samples/attack_scenario.pcap (needs scapy and Pillow)
+npm run sample:artex    # regenerate samples/artex_ai_attack.pcap (needs scapy)
 ```
 
 Edit files in `src/`, run `npm run build`, and commit the rebuilt `dist/capsight.html` together with your source changes. Every push to `main` that changes `dist/` redeploys the live site through `.github/workflows/pages.yml`. CI runs the tests and `python3 tools/build.py --check`, which fails if the committed bundle is stale.
@@ -286,6 +300,7 @@ capture/          Capsight Capture, the helper that records traffic to .pcap (Py
 assets/           logo, link-preview card and start-page app images
 fonts/            DM Sans and IBM Plex Mono (SIL Open Font License), embedded at build time
 samples/          attack_scenario.pcap
+                  artex_ai_attack.pcap  an ARTEX-style AI-driven intrusion, built from public reporting
 tools/
   build.py          bundles everything into dist/capsight.html
   gen_attack_pcap.py  generates the sample capture

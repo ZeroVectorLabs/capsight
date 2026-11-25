@@ -13,6 +13,7 @@ Notable changes to Capsight, newest first.
 - **Buttons:** monochrome, solid main buttons and underlined secondary ones, replacing the cyan gradient pills.
 - **Phones:** every screen reworked: a one-row header with icons, two-line packet rows with a long-press menu, the attack flow as a step list, a network map you can pan and pinch, and nothing pushing the page sideways.
 - Filter help lists clickable examples and every packet-list shortcut.
+- **New sample:** `samples/artex_ai_attack.pcap`, a synthetic ARTEX-style AI-driven intrusion built from public reporting (API-map recon, web shell, replayed runs, a 48-second recheck loop, metadata-service credential theft, AD recon, kerberoasting, lateral movement, exfiltration), with its generator `tools/gen_artex_pcap.py`.
 
 ## 3.1.1 (2026-11-25)
 
