@@ -4,6 +4,8 @@ Notable changes to Capsight, newest first.
 
 ## Unreleased
 
+- **Capture live traffic:** a new button on the start page and **Capture** in the top bar. It opens **Capsight Capture** (`capture/`), a small helper for Mac, Windows and Linux that checks what the computer can capture, lets you pick the network port, filter and stop condition, records to `.pcap` with live counters, and sends the capture straight back into the Capsight tab. If the helper isn't running, the dialog has the download and steps to start it.
+
 - **Shorter, clearer findings report:** it now opens with the verdict, an "At a glance" list (attacker, compromised hosts, C2, malware hosts) and "What to do now" steps built from the capture, then the **attack flow diagram** and the **network map**, a single timeline of every detection, and only the indicators, passwords and files that need action. Benign IP and domain lists, the separate tactics table and the host inventory are gone. Both diagrams are drawn as vector graphics in the web page and PDF, and as images in Word and Markdown.
 
 ## 3.0.0 (2026-11-24)

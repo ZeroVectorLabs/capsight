@@ -16,8 +16,13 @@ async def main():
         context = await browser.new_context(viewport={'width': 1440, 'height': 900}, accept_downloads=True)
         page = await context.new_page()
         page.on('pageerror', lambda e: errors.append(str(e)))
-        page.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
+        # the Capture dialog looks for the helper on 127.0.0.1:47115; a refused connection there is expected
+        page.on('console', lambda m: errors.append(m.text) if m.type == 'error' and 'ERR_CONNECTION_REFUSED' not in m.text and '47115' not in m.text else None)
         await page.goto((ROOT / 'dist' / 'capsight.html').as_uri())
+        # Capture live traffic: the dialog opens and offers the helper download when it isn't running
+        await page.click('.lcta [data-capture] >> nth=0')
+        await page.wait_for_selector('#mbody .cap a[href$="capsight-capture.zip"]', timeout=8000)
+        await page.click('#mclose')
         await page.click('#demoBtn')
         await page.wait_for_selector('#view-overview.on', timeout=20000)
         for v in VIEWS:

@@ -45,6 +45,7 @@
   - [Artifacts](#artifacts)
   - [DNS, TLS and HTTP](#dns-tls-and-http)
   - [Findings report](#findings-report)
+  - [Capture live traffic](#capture-live-traffic)
 - [How to work with it](#how-to-work-with-it)
 - [Filter syntax](#filter-syntax)
 - [Detections](#detections)
@@ -145,6 +146,10 @@ Click **Report** in the top bar to download a write-up of the capture as a **PDF
 
 <p align="center"><img src="docs/screenshots/report.png" alt="Download a findings report as PDF, web page, Word or Markdown" width="820"></p>
 
+### Capture live traffic
+
+Click **Capture live traffic** on the start page, or **Capture** in the top bar, to record traffic from one of your computer’s network ports and open it straight in Capsight. Browsers can’t read network ports, so recording runs in **Capsight Capture**, a small open-source helper in [`capture/`](capture/) that stays on your computer ([download](https://zerovectorlabs.github.io/capsight/capsight-capture.zip)). It checks what your computer can capture (permissions, capture driver, interfaces, disk space), lets you pick the port, an optional filter and a stop condition, shows live counters, and saves a standard `.pcap`. Click **Open in Capsight** and the capture opens in the tab you started from. On a Mac, double-click `Capsight Capture.command`; on Windows, install [Npcap](https://npcap.com) and double-click `Capsight Capture.bat`; on Linux, `sudo python3 capsight_capture.py`. See [capture/README.md](capture/README.md).
+
 ## How to work with it
 
 A typical investigation:
@@ -219,7 +224,7 @@ Regenerate it with `npm run sample` (needs Python with scapy and Pillow). The ou
 
 ## Privacy
 
-Capsight makes no network requests. The fonts and the sample are embedded in the HTML file, and captures are decoded with JavaScript in the page. Nothing you open is uploaded or stored. The only links that leave the page are the MITRE ATT&amp;CK technique links, the VirusTotal hash lookups and the link to this repository; they open in a new tab only when you click them, and the first two send only the technique ID or hash.
+Capsight makes no network requests, except that while the **Capture live traffic** dialog is open it checks `127.0.0.1:47115` on your own computer for the Capsight Capture helper. The fonts and the sample are embedded in the HTML file, and captures are decoded with JavaScript in the page. Nothing you open is uploaded or stored. The only links that leave the page are the MITRE ATT&amp;CK technique links, the VirusTotal hash lookups and the link to this repository; they open in a new tab only when you click them, and the first two send only the technique ID or hash.
 
 ## Development
 
@@ -246,6 +251,8 @@ src/
   strip.js        capture strip and start-page preview
   art.js          Artifacts view
   report.js       findings report (PDF, web page, Word, Markdown)
+  capture.js      Capture live traffic button and dialog
+capture/          Capsight Capture, the helper that records traffic to .pcap (Python, scapy)
   style.css       theme: black (dark) and soft blue (light), logo-coloured buttons
   shell.html      page template
 assets/           logo, link-preview card and start-page app images

@@ -3,7 +3,7 @@ import base64, gzip, pathlib
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 src = ROOT / 'src'
 html = (src/'shell.html').read_text()
-js = '\n'.join((src/f).read_text() for f in ['core.js','analysis.js','artifacts.js','ui.js','graph.js','strip.js','art.js','report.js'])
+js = '\n'.join((src/f).read_text() for f in ['core.js','analysis.js','artifacts.js','ui.js','graph.js','strip.js','art.js','report.js','capture.js'])
 assert '</script' not in js
 demo = base64.b64encode(gzip.compress((ROOT / 'samples' / 'attack_scenario.pcap').read_bytes(), 9, mtime=0)).decode()
 def ff(name, file, w, extra=''):

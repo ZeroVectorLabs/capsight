@@ -457,3 +457,21 @@ a.btn { text-decoration: none; color: var(--text); }
 .rpt-secret { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 13.5px; cursor: pointer; flex-wrap: wrap; }
 @media (max-width: 640px) { .rpt-grid { grid-template-columns: 1fr; } }
 @media (max-width: 1600px) { .filemeta .pill { display: none; } }
+
+/* live capture */
+.pbtn svg, #captureBtn svg { width: 18px; height: 18px; margin-right: 8px; flex: none; }
+#captureBtn svg { width: 15px; height: 15px; margin-right: 6px; }
+.pbtn.sm { min-height: 36px; font-size: 14px; padding: 0 16px; }
+.cap-status { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 16px; border-radius: 14px; background: var(--panel-2); border: 1px solid var(--line-2); margin-bottom: 14px; }
+.cap-status i { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); animation: cappulse 1.4s infinite; flex: none; }
+.cap-status.ok i { background: var(--good); animation: none; }
+.cap-status span { flex: 1; min-width: 200px; font-weight: 600; }
+@keyframes cappulse { 50% { opacity: .3; } }
+.cap-steps { margin: 0; padding-left: 22px; display: grid; gap: 14px; }
+.cap-steps > li::marker { font-weight: 700; color: var(--text-2); }
+.cap-steps ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; color: var(--text-2); }
+.cap-steps ul li.me { color: var(--text); }
+.cap-note { color: var(--muted); font-size: 13px; }
+.cap code { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12.5px; background: var(--panel-3); padding: 1px 6px; border-radius: 6px; }
+.cap a:not(.pbtn) { color: var(--accent-ink); }
+@media (prefers-reduced-motion: reduce) { .cap-status i { animation: none; } }
