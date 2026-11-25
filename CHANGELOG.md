@@ -2,6 +2,10 @@
 
 Notable changes to Capsight, newest first.
 
+## Unreleased
+
+- **Shorter, clearer findings report:** it now opens with the verdict, an "At a glance" list (attacker, compromised hosts, C2, malware hosts) and "What to do now" steps built from the capture, then the **attack flow diagram** and the **network map**, a single timeline of every detection, and only the indicators, passwords and files that need action. Benign IP and domain lists, the separate tactics table and the host inventory are gone. Both diagrams are drawn as vector graphics in the web page and PDF, and as images in Word and Markdown.
+
 ## 3.0.0 (2026-11-24)
 
 - **New demo video:** a 65-second tour of Capsight 3.0.0 (`docs/media/capsight_demo.mp4`).

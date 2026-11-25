@@ -141,7 +141,7 @@ Queried domains grouped by registered domain with their answers and NXDOMAIN cou
 
 ### Findings report
 
-Click **Report** in the top bar to download a write-up of the capture as a **PDF**, a **web page**, a **Word** document or **Markdown**. It holds the verdict and summary, every detection in order with its MITRE ATT&amp;CK tactic and technique, the hosts involved, indicators, recovered files with SHA-256 hashes, and cleartext credentials. Passwords are masked unless you choose to include them. A clean capture gets a report that says so, and that no known attack pattern matched. The PDF is made with your browser’s print window (choose **Save as PDF**); like everything else, the report is built in the page and never uploaded.
+Click **Report** in the top bar to download a write-up of the capture as a **PDF**, a **web page**, a **Word** document or **Markdown**. It is short and to the point: the verdict, the attacker, compromised hosts and C2 at a glance, what to do now, the attack flow diagram and the network map, a timeline of every detection with its MITRE ATT&amp;CK tactic and technique, then only the indicators, cleartext passwords and suspicious files that matter. Passwords are masked unless you choose to include them. A clean capture gets a report that says so, and that no known attack pattern matched. The PDF is made with your browser’s print window (choose **Save as PDF**); like everything else, the report is built in the page and never uploaded.
 
 <p align="center"><img src="docs/screenshots/report.png" alt="Download a findings report as PDF, web page, Word or Markdown" width="820"></p>
 

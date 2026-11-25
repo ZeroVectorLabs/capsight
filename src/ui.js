@@ -667,43 +667,52 @@ function renderThreats() {
   drawDetections();
   if (S.tsel !== null) { const t = S.tsel; setTimeout(() => selectThreat(t, true), 60); }
 }
-function drawSequence() {
-  const cap = S.cap, F = cap.flow, el = $('#seq');
-  const lanes = F.lanes, steps = F.steps;
-  const avail = el.clientWidth || 1100, gut = 78, n = lanes.length;
-  const lw = Math.max(132, Math.min(230, (avail - gut - 20) / n));
-  const W = gut + lw * n + 20, top = 78, rh = 50, H = top + steps.length * rh + 24;
+/* The attack-flow diagram as SVG. The app draws it with theme variables; the report passes fixed colours. */
+function seqSvg(cap, o = {}) {
+  const F = cap.flow, lanes = F.lanes, steps = F.steps;
+  const C = o.col || (k => `var(--${k})`), avail = o.avail || 1100, gut = 78, n = lanes.length;
+  const lw = Math.max(o.minLane || 132, Math.min(230, (avail - gut - 20) / n));
+  const top = 78, rh = 50, H = top + steps.length * rh + 24;
   const lx = i => gut + lw * i + lw / 2;
   const li = new Map(lanes.map((l, i) => [l.id, i]));
-  const roleColor = r => ({ 'Attacker': 'var(--crit)', 'Botnet / spoofed': 'var(--crit)', 'Rogue insider': 'var(--crit)', 'C2 server': 'var(--high)', 'Malware host': 'var(--high)', 'Compromised host': 'var(--med)', 'At-risk host': 'var(--med)' }[r] || 'var(--muted)');
-  let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs>${['critical', 'high', 'medium', 'low'].map(k => `<marker id="ah-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(${SEV_VAR[k]})"/></marker>`).join('')}</defs>`;
+  const sevC = k => C(SEV_VAR[k].slice(2));
+  const roleColor = r => ({ 'Attacker': 'crit', 'Botnet / spoofed': 'crit', 'Rogue insider': 'crit', 'C2 server': 'high', 'Malware host': 'high', 'Compromised host': 'med', 'At-risk host': 'med' }[r] || 'muted');
+  let W = gut + lw * n + 20, body = '';
   lanes.forEach((l, i) => {
-    const x = lx(i), id = l.id.length > 22 ? l.id.slice(0, 21) + '…' : l.id;
-    s += `<line x1="${x}" x2="${x}" y1="${top - 6}" y2="${H - 10}" stroke="var(--line-2)" stroke-dasharray="3 4"/>`;
-    s += `<rect x="${x - lw / 2 + 8}" y="10" width="${lw - 16}" height="${top - 22}" rx="4" fill="var(--panel-2)"/>`;
-    s += `<rect x="${x - lw / 2 + 8}" y="10" width="${lw - 16}" height="3" fill="${roleColor(l.role)}"/>`;
-    s += `<text x="${x}" y="33" text-anchor="middle" font-size="12.5" font-weight="650" fill="${roleColor(l.role)}">${esc(l.role)}</text>`;
-    s += `<text x="${x}" y="51" text-anchor="middle" font-size="12" font-weight="550" fill="var(--text)" font-family="IBM Plex Mono, monospace"><title>${esc(l.id)}</title>${esc(id)}</text>`;
+    const cut = o.compact ? 15 : 22, x = lx(i), id = l.id.length > cut ? l.id.slice(0, cut - 1) + '…' : l.id, rc = C(roleColor(l.role));
+    const fr = o.compact ? 11.5 : 12.5, fi = o.compact ? 10 : 12;
+    body += `<line x1="${x}" x2="${x}" y1="${top - 6}" y2="${H - 10}" stroke="${C('line-2')}" stroke-dasharray="3 4"/>`;
+    body += `<rect x="${x - lw / 2 + 4}" y="10" width="${lw - 8}" height="${top - 22}" rx="4" fill="${C('panel-2')}"/>`;
+    body += `<rect x="${x - lw / 2 + 4}" y="10" width="${lw - 8}" height="3" fill="${rc}"/>`;
+    body += `<text x="${x}" y="33" text-anchor="middle" font-size="${fr}" font-weight="650" fill="${rc}">${esc(l.role)}</text>`;
+    body += `<text x="${x}" y="51" text-anchor="middle" font-size="${fi}" font-weight="550" fill="${C('text')}" font-family="IBM Plex Mono, ui-monospace, Menlo, Consolas, monospace"><title>${esc(l.id)}</title>${esc(id)}</text>`;
   });
   steps.forEach((st, k) => {
     const d = st.d, y = top + k * rh + rh / 2, a = li.get(st.src), b = li.get(st.dst);
-    const xa = lx(a), xb = lx(b), sev = d.sev;
-    const vis = (!S.stage || d.stage === S.stage) && (!S.sevF || d.sev === S.sevF);
-    s += `<g class="row ${S.tsel === d.id ? 'sel' : ''}" data-d="${d.id}" opacity="${vis ? 1 : 0.22}"><rect class="band" x="0" y="${y - rh / 2 + 2}" width="${W}" height="${rh - 4}" rx="8" fill="transparent"/>`;
-    s += `<text x="12" y="${y + 4}" font-size="11" fill="var(--muted)" style="font-variant-numeric:tabular-nums">+${fmtRel(d.t0 - cap.t0, cap.dur)}</text>`;
-    if (a === b) s += `<path d="M${xa + 12},${y - 8} h36 v16 h-30" fill="none" stroke="var(${SEV_VAR[sev]})" stroke-width="2" marker-end="url(#ah-${sev})"/>`;
-    else s += `<line x1="${xa + (xb > xa ? 12 : -12)}" x2="${xb + (xb > xa ? -6 : 6)}" y1="${y}" y2="${y}" stroke="var(${SEV_VAR[sev]})" stroke-width="2" marker-end="url(#ah-${sev})"/>`;
-    s += `<circle cx="${xa}" cy="${y}" r="11" fill="var(${SEV_VAR[sev]})" stroke="var(--panel)" stroke-width="2"/><text x="${xa}" y="${y + 4}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${sev === 'medium' ? '#111' : '#fff'}">${k + 1}</text>`;
-    const lx0 = Math.min(xa, xb) + 18, rightward = xb >= xa;
+    const xa = lx(a), xb = lx(b), sev = d.sev, col = sevC(sev);
+    const vis = o.vis ? o.vis(d) : true;
+    body += `<g class="row ${o.sel === d.id ? 'sel' : ''}" data-d="${d.id}" opacity="${vis ? 1 : 0.22}"><rect class="band" x="0" y="${y - rh / 2 + 2}" width="100%" height="${rh - 4}" rx="8" fill="transparent"/>`;
+    body += `<text x="12" y="${y + 4}" font-size="${o.compact ? 13 : 11}" fill="${C('muted')}" style="font-variant-numeric:tabular-nums">+${fmtRel(d.t0 - cap.t0, cap.dur)}</text>`;
+    if (a === b) body += `<path d="M${xa + 12},${y - 8} h36 v16 h-30" fill="none" stroke="${col}" stroke-width="2" marker-end="url(#ah-${sev})"/>`;
+    else body += `<line x1="${xa + (xb > xa ? 12 : -12)}" x2="${xb + (xb > xa ? -6 : 6)}" y1="${y}" y2="${y}" stroke="${col}" stroke-width="2" marker-end="url(#ah-${sev})"/>`;
+    body += `<circle cx="${xa}" cy="${y}" r="11" fill="${col}" stroke="${C('panel')}" stroke-width="2"/><text x="${xa}" y="${y + 4}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${sev === 'medium' ? '#111' : '#fff'}">${k + 1}</text>`;
     const label = d.title.length > 58 ? d.title.slice(0, 56) + '…' : d.title;
-    const anchorX = a === b ? xa + 56 : (Math.abs(xb - xa) < label.length * 7.2 + 40 ? Math.max(xa, xb) + 16 : lx0);
-    s += `<text x="${anchorX}" y="${y - 7}" font-size="13" font-weight="650" fill="var(--text)">${esc(label)}</text>`;
-    s += `<text x="${anchorX}" y="${y + 15}" font-size="11.5" fill="var(--muted)">${SEV_LABEL[sev]}, ${esc(STAGES.find(x => x.k === d.stage).name)}, ${d.tech}</text>`;
-    void rightward;
-    s += `</g>`;
+    const anchorX = a === b ? xa + 56 : (Math.abs(xb - xa) < label.length * 7.2 * (o.compact ? 1.23 : 1) + 40 ? Math.max(xa, xb) + 16 : Math.min(xa, xb) + 18);
+    const meta = `${SEV_LABEL[sev]}, ${STAGES.find(x => x.k === d.stage).name}, ${d.tech}`;
+    const k1 = o.compact ? 1.23 : 1;
+    W = Math.max(W, anchorX + Math.max(label.length * 7.4, meta.length * 6.2) * k1 + 16);
+    const ft = o.compact ? 16 : 13, fm = o.compact ? 13 : 11.5;
+    body += `<text x="${anchorX}" y="${y - 7}" font-size="${ft}" font-weight="650" fill="${C('text')}">${esc(label)}</text>`;
+    body += `<text x="${anchorX}" y="${y + 15}" font-size="${fm}" fill="${C('muted')}">${esc(meta)}</text></g>`;
   });
-  s += `</svg>`;
-  el.innerHTML = s;
+  W = Math.ceil(W);
+  const defs = `<defs>${['critical', 'high', 'medium', 'low'].map(k => `<marker id="ah-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${sevC(k)}"/></marker>`).join('')}</defs>`;
+  const bg = o.bg ? `<rect width="${W}" height="${H}" fill="${o.bg}"/>` : '';
+  return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"${o.font ? ` font-family="${o.font}"` : ''}>${defs}${bg}${body}</svg>`, W, H };
+}
+function drawSequence() {
+  const cap = S.cap, el = $('#seq');
+  el.innerHTML = seqSvg(cap, { avail: el.clientWidth || 1100, sel: S.tsel, vis: d => (!S.stage || d.stage === S.stage) && (!S.sevF || d.sev === S.sevF) }).svg;
   $$('#seq .row').forEach(g => { g.onclick = () => selectThreat(+g.dataset.d, true); g.onmousemove = e => { const d = cap.threats[+g.dataset.d]; tip(`<div class="tt-h">${esc(d.title)}</div><div style="color:var(--text-2);max-width:320px">${esc(d.summary)}</div>`, e); }; g.onmouseleave = untip; });
 }
 function drawDetections() {
