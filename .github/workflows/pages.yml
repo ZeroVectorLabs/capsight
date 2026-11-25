@@ -35,7 +35,7 @@ jobs:
           (cd capture && zip -q -X -r ../_site/capsight-capture.zip capsight_capture.py README.md 'Capsight Capture.command' 'Capsight Capture.bat')
           printf '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://zerovectorlabs.github.io/capsight/</loc><lastmod>%s</lastmod></url></urlset>\n' "$(date -u +%F)" > _site/sitemap.xml
           touch _site/.nojekyll
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
