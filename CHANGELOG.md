@@ -2,6 +2,18 @@
 
 Notable changes to Capsight, newest first.
 
+## 4.0.0 (2026-11-25)
+
+- **Wireshark display filters:** the filter bar now reads Wireshark's syntax: field names like `ip.addr`, `tcp.port`, `tcp.flags.syn`, `http.request.method`, `dns.qry.name` and `tls.handshake.extensions_server_name`; `== != > < >= <=` and `eq ne gt lt ge le`; `contains` and `matches`; byte slices like `tcp[13:1] == 02`; and `&& || !`, `and or not` with brackets. The bar turns green or red as you type, and Enter applies the filter. Capsight's short forms still work.
+- **Right-click a packet** (long-press on a phone) for Wireshark's packet menu: Apply as filter and Prepare as filter in all six forms, conversation filters, colourise conversation, follow TCP/UDP/TLS/HTTP stream, mark, ignore, time reference, packet comment, copy (summary, CSV, value, filter, hex dump, hex stream, text, escaped) and export the packet's bytes or the packet as .pcapng.
+- **Right-click a field** in the packet details to filter on it, copy it or export its bytes; double-click applies it as a filter. Fields without a named filter use a byte slice counted from their protocol's start.
+- **Packet list:** sortable columns, Wireshark's default colouring rules, time formats (since start, since previous, time of day, UTC, epoch) with time references, go to packet, find by text, hex or filter, next and previous marked packet or packet in the same conversation, and a status bar with displayed, marked and ignored counts.
+- **Export** shown or marked packets as .pcapng with your comments, or the packet list as CSV or text.
+- **Follow stream** shows one direction or both, as ASCII, a hex dump or raw hex, and can show, filter out or save the stream.
+- **Buttons:** monochrome, solid main buttons and underlined secondary ones, replacing the cyan gradient pills.
+- **Phones:** every screen reworked: a one-row header with icons, two-line packet rows with a long-press menu, the attack flow as a step list, a network map you can pan and pinch, and nothing pushing the page sideways.
+- Filter help lists clickable examples and every packet-list shortcut.
+
 ## 3.1.1 (2026-11-25)
 
 - **Capture live traffic:** record from a network port on your computer and analyse it straight away. The **Capture live traffic** button on the start page, or **Capture** in the top bar, opens the Capture page inside Capsight. It connects to **Capsight Capture** (`capture/`), a small open-source helper for Mac, Windows and Linux that runs in the background, because browsers can't read network ports. The page shows what your computer can capture with a fix for anything missing, a drop-down list of network ports, an optional filter and stop condition, and live counters with a traffic graph, top protocols and busiest addresses. It follows the light and dark theme.

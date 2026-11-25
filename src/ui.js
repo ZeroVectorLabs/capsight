@@ -37,7 +37,7 @@ const SEV_VAR = { critical: '--crit', high: '--high', medium: '--med', low: '--l
 const sevBadge = (sev, n) => `<span class="sev ${sev}">${SVGI(SEV_ICON[sev], 14)}${SEV_LABEL[sev]}${n !== undefined ? ' <span class="n">' + n + '</span>' : ''}</span>`;
 const ROLE_CLS = { 'At-risk host': 'r-compromised', 'Malware host': 'r-c2', 'Attacker': 'r-attacker', 'Botnet / spoofed': 'r-botnet', 'Rogue insider': 'r-insider', 'C2 server': 'r-c2', 'Compromised host': 'r-compromised', 'Victim': 'r-victim' };
 
-const S = { cap: null, A: null, idx: null, idxNT: null, view: 'overview', sel: -1, tl: 'bytes', pm: 'p', hidden: new Set(), chips: { time: null, host: null, proto: null, ev: null }, expr: '', fn: null, dirty: {}, tsel: null, stage: null, sevF: null, colorOf: new Map(), order: [], roles: new Map(), openLayers: new Set(), graph: null };
+const S = { cap: null, A: null, idx: null, idxNT: null, view: 'overview', sel: -1, tl: 'bytes', pm: 'p', hidden: new Set(), chips: { time: null, host: null, proto: null, ev: null }, expr: '', fn: null, dirty: {}, tsel: null, stage: null, sevF: null, colorOf: new Map(), order: [], roles: new Map(), openLayers: new Set(), graph: null, pk: pkState() };
 
 /* ---------- helpers ---------- */
 function tip(html, ev) { const t = $('#tooltip'); t.innerHTML = html; t.classList.add('on'); const w = t.offsetWidth, h = t.offsetHeight; let x = ev.clientX + 14, y = ev.clientY + 14; if (x + w > innerWidth - 8) x = ev.clientX - w - 14; if (y + h > innerHeight - 8) y = ev.clientY - h - 14; t.style.left = x + 'px'; t.style.top = y + 'px'; }
@@ -90,7 +90,7 @@ async function loadDemo() {
 }
 
 function setCapture(cap) {
-  S.cap = cap; S.sel = -1; S.hidden.clear(); S.tsel = null; S.stage = null; S.sevF = null; S.openLayers = new Set();
+  S.cap = cap; S.sel = -1; S.hidden.clear(); S.tsel = null; S.stage = null; S.sevF = null; S.openLayers = new Set(); S.pk = pkState(S.pk);
   S.chips = { time: null, host: null, proto: null, ev: null }; S.expr = ''; S.fn = null; $('#fin').value = '';
   // protocol colours: top 7 by packets get fixed slots for this capture
   const A = aggregate(cap, null);
@@ -174,46 +174,122 @@ function render() {
 
 /* ---------- filtering ---------- */
 function ipInt(ip) { const p = ip.split('.'); if (p.length !== 4) return null; return ((+p[0] << 24) >>> 0) + (+p[1] << 16) + (+p[2] << 8) + +p[3]; }
+function numOf(v) { v = String(v).trim(); if (/^(true|set)$/i.test(v)) return 1; if (/^(false|not set)$/i.test(v)) return 0; return /^0x[0-9a-f]+$/i.test(v) ? parseInt(v, 16) : parseFloat(v); }
 function cmpFn(op, v) {
-  const n = parseFloat(v);
+  const n = numOf(v);
   switch (op) { case '>': return x => x > n; case '<': return x => x < n; case '>=': return x => x >= n; case '<=': return x => x <= n; default: return x => x === n; }
 }
+// '==' is exact (as in Wireshark); ':' and '=' are Capsight's loose "includes"; '~' is contains; '~~' is a regular expression
+function strFn(op, v) {
+  const lv = v.toLowerCase();
+  if (op === '==') return x => String(x ?? '').toLowerCase() === lv;
+  if (op === '~~') { const re = new RegExp(v, 'i'); return x => re.test(String(x ?? '')); }
+  if (op === '~') return x => String(x ?? '').includes(v);
+  return x => String(x ?? '').toLowerCase().includes(lv);
+}
+// unquoted 0a:0b:0c (or a single byte) is bytes; anything else is text, as in Wireshark
+function bytesOf(v, quoted) {
+  if (!quoted && /^[0-9a-f]{2}([:.\-][0-9a-f]{2})*$/i.test(v)) return Uint8Array.from(v.split(/[:.\-]/), x => parseInt(x, 16));
+  if (!quoted && /^0x[0-9a-f]+$/i.test(v) && v.length % 2 === 0) return Uint8Array.from(v.slice(2).match(/../g), x => parseInt(x, 16));
+  return Uint8Array.from(v, c => c.charCodeAt(0) & 255);
+}
+function findBytes(h, n, from = 0) {
+  if (!n.length) return from; const f = n[0], last = h.length - n.length;
+  outer: for (let i = from; i <= last; i++) { if (h[i] !== f) continue; for (let j = 1; j < n.length; j++) if (h[i + j] !== n[j]) continue outer; return i; }
+  return -1;
+}
+const sameBytes = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 const FLAG = { syn: s => (s.fl & 2) && !(s.fl & 16), synack: s => (s.fl & 18) === 18, rst: s => s.fl & 4, fin: s => s.fl & 1, psh: s => s.fl & 8, ack: s => s.fl & 16, urg: s => s.fl & 32 };
+const TCP_BIT = { syn: 2, ack: 16, fin: 1, reset: 4, rst: 4, push: 8, psh: 8, urg: 32, ece: 64, ecn: 64, cwr: 128, ns: 256 };
+// where each protocol's bytes start in a frame, for slices like tcp[13:1] and "tcp contains ..."
+function protoBase(p, s) {
+  if (p === 'frame' || p === 'eth') return 0;
+  if (p === 'ip' || p === 'ipv6') return s.ipv === (p === 'ip' ? 4 : 6) ? s.l3o : -1;
+  if (p === 'tcp' || p === 'udp') return s.l4 === p.toUpperCase() ? s.l4o : -1;
+  return s.proto.toLowerCase() === p && s.pll ? s.plo : -1;
+}
 function hostMatch(v) {
   if (v.includes('/')) { const [b, m] = v.split('/'); const bi = ipInt(b), mm = +m; if (bi !== null && mm >= 0 && mm <= 32) { const mask = mm === 0 ? 0 : (0xffffffff << (32 - mm)) >>> 0; const net = (bi & mask) >>> 0; return ip => { const x = ipInt(ip); return x !== null && ((x & mask) >>> 0) === net; }; } }
   if (v.endsWith('*') || v.endsWith('.')) { const p = v.replace(/\*$/, ''); return ip => ip.startsWith(p); }
-  return ip => ip === v;
+  const lv = v.toLowerCase();
+  return ip => ip === v || ip.toLowerCase() === lv;
 }
-function keyTerm(k, op, v) {
-  const lv = v.toLowerCase(), num = op === '>' || op === '<' || op === '>=' || op === '<=';
-  const c = cmpFn(op, v);
-  const inc = (x) => (x || '').toLowerCase().includes(lv);
+// keys every filter supports; the packet menus only build filters from these or from byte slices
+const FILTER_KEYS = new Set(['ip', 'host', 'addr', 'ip.addr', 'ipv6.addr', 'src', 'ip.src', 'ipv6.src', 'dst', 'ip.dst', 'ipv6.dst', 'mac', 'eth.addr', 'eth.src', 'eth.dst', 'port', 'tcp.port', 'udp.port', 'sport', 'srcport', 'tcp.srcport', 'udp.srcport', 'dport', 'dstport', 'tcp.dstport', 'udp.dstport', 'proto', 'protocol', '_ws.col.protocol', 'len', 'size', 'frame.len', 'frame', 'no', 'frame.number', 'ttl', 'ip.ttl', 'ipv6.hlim', 'ip.id', 'stream', 'tcp.stream', 'udp.stream', 'time', 't', 'frame.time_relative', 'frame.time_epoch', 'sni', 'tls.sni', 'tls.handshake.extensions_server_name', 'dns', 'domain', 'dns.qry.name', 'http', 'http.uri', 'http.request.uri', 'http.host', 'http.ua', 'ua', 'http.user_agent', 'http.request.method', 'status', 'http.status', 'http.response.code', 'flags', 'tcp.flags', 'tcp.len', 'info', '_ws.col.info', 'vlan', 'vlan.id', 'icmp.type', 'icmp.code', 'arp.opcode', 'arp.src.proto_ipv4', 'arp.dst.proto_ipv4', 'arp.src.hw_mac', 'arp.dst.hw_mac', 'frame.marked', 'frame.ignored', 'frame.comment', 'frame.coloring_rule.name']);
+function keyTerm(k, op, raw) {
+  const quoted = /^".*"$/.test(raw), v = quoted ? raw.slice(1, -1).replace(/\\"/g, '"') : raw;
+  const lv = v.toLowerCase();
+  const c = cmpFn(op, v), sf = strFn(op, v);
+  const sl = k.match(/^([a-z0-9_]+)\[(\d+)(?::(\d+))?\]$/);
+  if (sl) {
+    const pr = sl[1], a = +sl[2], n = sl[3] !== undefined ? +sl[3] : 1, want = bytesOf(v, quoted);
+    return r => { const b0 = protoBase(pr, r.s); if (b0 < 0) return false; const by = pkBytes(S.cap, r.i).subarray(b0 + a, b0 + a + n); return op === '~' ? findBytes(by, want) >= 0 : sameBytes(by, want); };
+  }
+  if (op === '~' || op === '~~') {
+    const pr = k.split('.')[0];
+    if (!k.includes('.') && !FILTER_KEYS.has(k) || ['frame', 'eth', 'ip', 'ipv6', 'tcp', 'udp'].includes(k)) {
+      if (op === '~~') { const re = new RegExp(v, 'i'); return r => { const b0 = protoBase(pr, r.s); if (b0 < 0) return false; return re.test(latin(pkBytes(S.cap, r.i), b0, r.cap, 65536)); }; }
+      const want = bytesOf(v, quoted);
+      return r => { const b0 = protoBase(pr, r.s); return b0 >= 0 && findBytes(pkBytes(S.cap, r.i), want, b0) >= 0; };
+    }
+  }
+  const tcp = r => r.s.l4 === 'TCP', udp = r => r.s.l4 === 'UDP';
   switch (k) {
     case 'ip': case 'host': case 'addr': case 'ip.addr': case 'ipv6.addr': { const h = hostMatch(v); return r => h(r.s.src) || h(r.s.dst); }
-    case 'src': case 'ip.src': { const h = hostMatch(v); return r => h(r.s.src); }
-    case 'dst': case 'ip.dst': { const h = hostMatch(v); return r => h(r.s.dst); }
+    case 'src': case 'ip.src': case 'ipv6.src': { const h = hostMatch(v); return r => h(r.s.src); }
+    case 'dst': case 'ip.dst': case 'ipv6.dst': { const h = hostMatch(v); return r => h(r.s.dst); }
     case 'mac': case 'eth.addr': return r => r.s.smac === lv || r.s.dmac === lv;
-    case 'port': case 'tcp.port': case 'udp.port': return r => r.s.sp >= 0 && (c(r.s.sp) || c(r.s.dp));
-    case 'sport': case 'srcport': case 'tcp.srcport': case 'udp.srcport': return r => r.s.sp >= 0 && c(r.s.sp);
-    case 'dport': case 'dstport': case 'tcp.dstport': case 'udp.dstport': return r => r.s.dp >= 0 && c(r.s.dp);
+    case 'eth.src': return r => r.s.smac === lv;
+    case 'eth.dst': return r => r.s.dmac === lv;
+    case 'port': return r => r.s.sp >= 0 && (c(r.s.sp) || c(r.s.dp));
+    case 'tcp.port': return r => tcp(r) && (c(r.s.sp) || c(r.s.dp));
+    case 'udp.port': return r => udp(r) && (c(r.s.sp) || c(r.s.dp));
+    case 'sport': case 'srcport': return r => r.s.sp >= 0 && c(r.s.sp);
+    case 'tcp.srcport': return r => tcp(r) && c(r.s.sp);
+    case 'udp.srcport': return r => udp(r) && c(r.s.sp);
+    case 'dport': case 'dstport': return r => r.s.dp >= 0 && c(r.s.dp);
+    case 'tcp.dstport': return r => tcp(r) && c(r.s.dp);
+    case 'udp.dstport': return r => udp(r) && c(r.s.dp);
     case 'proto': case 'protocol': return r => r.s.proto.toLowerCase() === lv || r.s.l4.toLowerCase() === lv;
+    case '_ws.col.protocol': return r => sf(r.s.proto);
     case 'len': case 'size': case 'frame.len': return r => c(r.len);
     case 'frame': case 'no': case 'frame.number': return r => c(r.i + 1);
-    case 'ttl': case 'ip.ttl': return r => r.s.ttl !== undefined && c(r.s.ttl);
-    case 'stream': case 'tcp.stream': case 'udp.stream': return r => r.s.st === +v;
-    case 'time': case 't': case 'frame.time_relative': return r => c(r.t - S.cap.t0);
-    case 'sni': case 'tls.sni': return r => inc(r.s.sni);
-    case 'dns': case 'domain': case 'dns.qry.name': return r => !!r.s.dns && r.s.dns.qs.some(q => q.name.toLowerCase().includes(lv));
-    case 'http': case 'http.uri': return r => !!r.s.http && inc(r.s.http.uri || r.s.http.line);
-    case 'http.host': return r => !!r.s.http && inc(r.s.http.host);
-    case 'http.ua': case 'ua': return r => !!r.s.http && inc(r.s.http.ua);
-    case 'status': case 'http.status': return r => !!r.s.http && r.s.http.resp && c(r.s.http.status);
-    case 'flags': case 'tcp.flags': { const f = FLAG[lv]; return f ? r => r.s.l4 === 'TCP' && !!f(r.s) : () => false; }
-    case 'info': return r => inc(r.s.info);
-    case 'vlan': return r => r.s.vlan === +v;
-    default: { const needle = (k + ':' + v).toLowerCase(); return r => r.s.info.toLowerCase().includes(needle); }
+    case 'ttl': case 'ip.ttl': return r => r.s.ipv === 4 && c(r.s.ttl);
+    case 'ipv6.hlim': return r => r.s.ipv === 6 && c(r.s.ttl);
+    case 'ip.id': return r => r.s.ipid !== undefined && c(r.s.ipid);
+    case 'stream': return r => r.s.st === +v;
+    case 'tcp.stream': return r => tcp(r) && r.s.st === +v;
+    case 'udp.stream': return r => udp(r) && r.s.st === +v;
+    case 'time': case 't': case 'frame.time_relative': { if (op === '==') { const n = numOf(v); return r => Math.abs(r.t - S.cap.t0 - n) < 5e-7; } return r => c(r.t - S.cap.t0); }
+    case 'frame.time_epoch': { if (op === '==') { const n = numOf(v); return r => Math.abs(r.t - n) < 5e-7; } return r => c(r.t); }
+    case 'sni': case 'tls.sni': case 'tls.handshake.extensions_server_name': return r => !!r.s.sni && sf(r.s.sni);
+    case 'dns': case 'domain': case 'dns.qry.name': return r => !!r.s.dns && r.s.dns.qs.some(q => sf(q.name));
+    case 'http': case 'http.uri': return r => !!r.s.http && sf(r.s.http.uri || r.s.http.line);
+    case 'http.request.uri': return r => !!r.s.http && !r.s.http.resp && sf(r.s.http.uri);
+    case 'http.host': return r => !!r.s.http && !r.s.http.resp && sf(r.s.http.host);
+    case 'http.ua': case 'ua': case 'http.user_agent': return r => !!r.s.http && !r.s.http.resp && sf(r.s.http.ua);
+    case 'http.request.method': return r => !!r.s.http && !r.s.http.resp && sf(r.s.http.method);
+    case 'status': case 'http.status': case 'http.response.code': return r => !!r.s.http && r.s.http.resp && c(r.s.http.status);
+    case 'flags': case 'tcp.flags': { if (/^(0x)?[0-9a-f]+$/i.test(v) && !FLAG[lv]) return r => tcp(r) && c(r.s.fl); const f = FLAG[lv]; return f ? r => tcp(r) && !!f(r.s) : () => false; }
+    case 'tcp.len': return r => tcp(r) && c(r.s.pll || 0);
+    case 'info': case '_ws.col.info': return r => (op === ':' || op === '=' ? strFn('=', v) : sf)(r.s.info);
+    case 'vlan': case 'vlan.id': return r => r.s.vlan !== undefined && c(r.s.vlan);
+    case 'icmp.type': return r => !!r.s.icmp && !r.s.icmp.v6 && c(r.s.icmp.type);
+    case 'icmp.code': return r => !!r.s.icmp && !r.s.icmp.v6 && c(r.s.icmp.code);
+    case 'icmpv6.type': return r => !!r.s.icmp && r.s.icmp.v6 && c(r.s.icmp.type);
+    case 'arp.opcode': return r => !!r.s.arp && c(r.s.arp.op);
+    case 'arp.src.proto_ipv4': return r => !!r.s.arp && r.s.arp.spa === v;
+    case 'arp.dst.proto_ipv4': return r => !!r.s.arp && r.s.arp.tpa === v;
+    case 'arp.src.hw_mac': return r => !!r.s.arp && String(r.s.arp.sha).toLowerCase() === lv;
+    case 'arp.dst.hw_mac': return r => !!r.s.arp && String(r.s.arp.tha).toLowerCase() === lv;
+    case 'frame.marked': { const want = !!numOf(v); return r => S.pk.marked.has(r.i) === want; }
+    case 'frame.ignored': { const want = !!numOf(v); return r => S.pk.ignored.has(r.i) === want; }
+    case 'frame.comment': return r => S.pk.comments.has(r.i) && sf(S.pk.comments.get(r.i));
+    case 'frame.coloring_rule.name': return r => sf(pkColorRule(r)?.name);
   }
-  void num;
+  const m = k.match(/^tcp\.flags\.([a-z]+)$/);
+  if (m && TCP_BIT[m[1]]) { const bit = TCP_BIT[m[1]]; return r => tcp(r) && c(r.s.fl & bit ? 1 : 0); }
+  const needle = (k + ':' + v).toLowerCase(); return r => r.s.info.toLowerCase().includes(needle);
 }
 function bareTerm(t) {
   const l = t.toLowerCase();
@@ -221,33 +297,62 @@ function bareTerm(t) {
   if (l === 'threat' || l === 'threats') return r => S.cap.pkSev[r.i] > 0;
   if (l === 'ip' || l === 'ipv4') return r => r.s.ipv === 4;
   if (l === 'ipv6') return r => r.s.ipv === 6;
-  if (l === 'malformed') return r => !!r.s.malformed;
+  if (l === 'malformed' || l === '_ws.malformed') return r => !!r.s.malformed;
+  if (l === 'eth') return r => !!r.s.smac;
+  if (l === 'frame') return () => true;
+  if (l === 'frame.marked') return r => S.pk.marked.has(r.i);
+  if (l === 'frame.ignored') return r => S.pk.ignored.has(r.i);
+  if (l === 'frame.comment' || l === 'pkt_comment') return r => S.pk.comments.has(r.i);
+  if (l === 'frame.ref_time') return r => S.pk.refs.has(r.i);
+  if (l === 'http.request') return r => !!r.s.http && !r.s.http.resp;
+  if (l === 'http.response') return r => !!r.s.http && !!r.s.http.resp;
+  if (l === 'dns.flags.response') return r => !!r.s.dns && /response/i.test(r.s.info) ;
+  if (l === 'tls.handshake') return r => r.s.proto === 'TLS' && /hello|handshake|certificate|key exchange/i.test(r.s.info);
+  if (l === 'vlan') return r => r.s.vlan !== undefined;
   const protos = new Set(S.order.map(p => p.toLowerCase()).concat(['tcp', 'udp', 'icmp', 'icmpv6', 'arp', 'dns', 'http', 'tls', 'quic', 'ssh', 'dhcp', 'ntp', 'ftp', 'smb', 'rdp', 'telnet']));
   if (protos.has(l)) return r => r.s.proto.toLowerCase() === l || r.s.l4.toLowerCase() === l;
   if (/^\d{1,3}(\.\d{1,3}){3}(\/\d+)?\*?$/.test(t) || /^[0-9a-f:]+:[0-9a-f:]+$/i.test(t) && t.split(':').length > 2) { const h = hostMatch(t); return r => h(r.s.src) || h(r.s.dst); }
   if (/^\d+$/.test(t)) { const n = +t; return r => r.s.sp === n || r.s.dp === n; }
+  // a Wireshark field on its own means "the packet has this protocol": tcp.port, dns.qry.name, ...
+  const dot = l.match(/^([a-z0-9]+)\.[a-z0-9_.]+$/);
+  if (dot && protos.has(dot[1])) { const p = dot[1]; return r => r.s.proto.toLowerCase() === p || r.s.l4.toLowerCase() === p; }
   return r => r.s.info.toLowerCase().includes(l) || r.s.src.toLowerCase().includes(l) || r.s.dst.toLowerCase().includes(l) || r.s.proto.toLowerCase() === l;
 }
+// Display filter grammar, as in Wireshark: expr := and (('or' | '||') and)* ; and := not (('and' | '&&')? not)* ; not := ('not' | '!') not | '(' expr ')' | term
+function filterTokens(expr) {
+  const s = expr
+    .replace(/\s+contains\s+/gi, '~').replace(/\s+matches\s+/gi, '~~')
+    .replace(/\s+(eq|ne|gt|lt|ge|le)\s+/gi, (m, o) => ({ eq: '==', ne: '!=', gt: '>', lt: '<', ge: '>=', le: '<=' })[o.toLowerCase()])
+    .replace(/\s*(==|!=|>=|<=|~~|~)\s*/g, '$1').replace(/([\w\]])\s+([<>])\s*(?=[\w"])/g, '$1$2');
+  return s.match(/\(|\)|&&|\|\||!(?=\s|\(|!|$)|(?:[^\s()&|"]|"(?:[^"\\]|\\.)*"|&(?!&)|\|(?!\|))+/g) || [];
+}
+function termFn(t) {
+  let neg = false;
+  if ((t[0] === '!' || t[0] === '-') && t.length > 1 && t[1] !== '=') { neg = true; t = t.slice(1); }
+  const m = t.match(/^([a-z_][a-z0-9_.]*(?:\[\d+(?::\d+)?\])?)(==|!=|>=|<=|~~|~|=|:|>|<)(.+)$/i);
+  let f;
+  if (m) { const op = m[2] === '!=' ? '==' : m[2]; f = keyTerm(m[1].toLowerCase(), op, m[3]); if (m[2] === '!=') { const g = f; f = r => !g(r); } }
+  else f = bareTerm(t.replace(/^"|"$/g, ''));
+  return neg ? r => !f(r) : f;
+}
 function compileFilter(expr) {
-  const toks = expr.match(/"[^"]*"|\S+/g) || [];
-  const groups = [[]];
-  for (let t of toks) {
-    const l = t.toLowerCase();
-    if (l === 'or' || l === '||') { groups.push([]); continue; }
-    if (l === 'and' || l === '&&') continue;
-    let neg = false;
-    if ((t[0] === '!' || t[0] === '-') && t.length > 1) { neg = true; t = t.slice(1); }
-    if (l.startsWith('not') && t.length === 3) continue;
-    t = t.replace(/^"|"$/g, '');
-    const m = t.match(/^([a-z][a-z0-9_.]*)\s*(==|!=|>=|<=|=|:|>|<)\s*(.+)$/i);
-    let f;
-    if (m) { f = keyTerm(m[1].toLowerCase(), m[2], m[3].replace(/^"|"$/g, '')); if (m[2] === '!=') { const g = f; f = r => !g(r); } }
-    else f = bareTerm(t);
-    groups[groups.length - 1].push(neg ? (g => r => !g(r))(f) : f);
+  const toks = filterTokens(expr);
+  if (!toks.length) return null;
+  let i = 0;
+  const isOr = t => t !== undefined && /^(or|\|\|)$/i.test(t), isAnd = t => t !== undefined && /^(and|&&)$/i.test(t);
+  function pOr() { let f = pAnd(); while (isOr(toks[i])) { i++; const a = f, b = pAnd(); f = r => a(r) || b(r); } return f; }
+  function pAnd() { let f = pNot(); for (;;) { const t = toks[i]; if (t === undefined || t === ')' || isOr(t)) return f; if (isAnd(t)) i++; const a = f, b = pNot(); f = r => a(r) && b(r); } }
+  function pNot() {
+    const t = toks[i];
+    if (t === undefined) throw new Error('The filter ends too early');
+    if (/^(not|!)$/i.test(t)) { i++; const g = pNot(); return r => !g(r); }
+    if (t === '(') { i++; const f = pOr(); if (toks[i++] !== ')') throw new Error('A bracket is not closed'); return f; }
+    if (t === ')' || isOr(t) || isAnd(t)) throw new Error('Unexpected ' + t);
+    i++; return termFn(t);
   }
-  const gs = groups.filter(g => g.length);
-  if (!gs.length) return null;
-  return r => gs.some(g => g.every(f => f(r)));
+  const f = pOr();
+  if (i < toks.length) throw new Error('Unexpected ' + toks[i]);
+  return f;
 }
 function applyFilter() {
   const cap = S.cap, C = S.chips;
@@ -286,7 +391,7 @@ function updateClearAll() { $('#clearAll').classList.toggle('hidden', !filterAct
 function clearFilters() {
   clearTimeout(finT);
   S.chips = { time: null, host: null, proto: null, ev: null }; S.fn = null; S.expr = '';
-  $('#fin').value = ''; $('#fx').classList.remove('bad');
+  $('#fin').value = ''; fxState('');
   applyFilter();
 }
 $('#clearAll').onclick = clearFilters;
@@ -295,12 +400,14 @@ $('#fin').addEventListener('input', e => {
   clearTimeout(finT);
   finT = setTimeout(() => {
     const v = e.target.value.trim();
-    try { S.fn = v ? compileFilter(v) : null; S.expr = v; $('#fx').classList.remove('bad'); applyFilter(); }
-    catch (err) { $('#fx').classList.add('bad'); updateClearAll(); }
+    try { S.fn = v ? compileFilter(v) : null; S.expr = v; fxState(v ? 'good' : ''); applyFilter(); }
+    catch (err) { fxState('bad', err.message); updateClearAll(); }
   }, 220);
 });
-$('#fin').addEventListener('keydown', e => { if (e.key === 'Escape') { e.target.value = ''; e.target.dispatchEvent(new Event('input')); e.target.blur(); } });
-function setExpr(v) { $('#fin').value = v; S.fn = compileFilter(v); S.expr = v; applyFilter(); }
+$('#fin').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(finT); setExpr(e.target.value); return; } if (e.key === 'Escape') { e.target.value = ''; e.target.dispatchEvent(new Event('input')); e.target.blur(); } });
+// Wireshark colours the filter bar: green when the filter is valid, red when it is not
+function fxState(st, msg) { const fx = $('#fx'); fx.classList.toggle('bad', st === 'bad'); fx.classList.toggle('good', st === 'good'); fx.title = msg || ''; }
+function setExpr(v) { $('#fin').value = v; try { S.fn = v.trim() ? compileFilter(v) : null; S.expr = v; fxState(v.trim() ? 'good' : ''); applyFilter(); } catch (err) { fxState('bad', err.message); toast(err.message); } }
 
 /* ===================== OVERVIEW ===================== */
 function renderOverview() {
@@ -465,116 +572,7 @@ function drawTimeline() {
   $$('.tmark', el).forEach(g => { const d = cap.threats[+g.dataset.d]; g.onmousemove = e => tip(`<div class="tt-h">${esc(d.title)}</div><div class="tt-r"><span>${sevBadge(d.sev)}</span><b>+${fmtRel(d.t0 - cap.t0, span)}</b></div><div class="tt-r"><span class="mono">${esc(d.src)} → ${esc(d.dst)}</span></div><div class="hint" style="margin-top:4px">Click to open in attack flow</div>`, e); g.onmouseleave = untip; g.onclick = () => { S.tsel = d.id; S.dirty.threats = 1; go('threats'); }; });
 }
 
-/* ===================== PACKETS ===================== */
-let RH = 28;
-const PHONE = () => matchMedia('(max-width: 640px)').matches;
-function renderPackets() {
-  const el = $('#view-packets');
-  if (!$('#pbody', el)) {
-    el.innerHTML = `<div class="pk-wrap">
-      <div class="card ptable"><div class="phead"><div>No.</div><div>Time</div><div>Source</div><div>Destination</div><div>Protocol</div><div>Length</div><div>Info</div></div><div class="pbody" id="pbody" tabindex="0"><div id="pspace"></div></div></div>
-      <div class="detail"><div class="card"><div class="dhead" id="dhead"></div><div class="tree" id="tree"></div></div><div class="card"><div class="dhead"><h3>Bytes</h3><span class="sub hint" id="hexsub"></span><span style="flex:1"></span><button class="btn sm ghost" id="copyhex">${SVGI(IC.copy, 14)} Copy hex</button></div><div class="hex" id="hex"></div></div></div></div>`;
-    const pb = $('#pbody');
-    pb.addEventListener('scroll', () => requestAnimationFrame(drawRows));
-    pb.addEventListener('click', e => { const r = e.target.closest('.prow'); if (r) selectPacket(+r.dataset.i); });
-    pb.addEventListener('keydown', e => {
-      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'PageDown' && e.key !== 'PageUp') return;
-      e.preventDefault();
-      const list = S.idx, n = list ? list.length : S.cap.pk.length; if (!n) return;
-      let pos = S.sel < 0 ? -1 : (list ? list.indexOf(S.sel) : S.sel);
-      const d = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : e.key === 'PageDown' ? 20 : -20;
-      pos = Math.max(0, Math.min(n - 1, pos + d));
-      selectPacket(list ? list[pos] : pos, true);
-    });
-    $('#copyhex').onclick = () => { if (S.sel < 0) return; const b = pkBytes(S.cap, S.sel); const h = [...b].map(h2).join(''); navigator.clipboard.writeText(h).then(() => toast('Copied ' + b.length + ' bytes as hex'), () => toast('Clipboard unavailable')); };
-  }
-  drawRows();
-  if (S.sel >= 0) showDetail(S.sel); else { $('#dhead').innerHTML = '<h3>Packet details</h3>'; $('#tree').innerHTML = '<div class="empty">Select a packet to inspect its layers</div>'; $('#hex').innerHTML = ''; $('#hexsub').textContent = ''; }
-}
-function drawRows() {
-  const pb = $('#pbody'); if (!pb) return;
-  const cap = S.cap, list = S.idx, n = list ? list.length : cap.pk.length;
-  RH = PHONE() ? 52 : 28; // phones show each packet on two lines
-  $('#pspace').style.height = (n * RH) + 'px';
-  const top = pb.scrollTop, h = pb.clientHeight;
-  const a = Math.max(0, Math.floor(top / RH) - 8), b = Math.min(n, Math.ceil((top + h) / RH) + 8);
-  let html = '';
-  const sevName = ['', 'low', 'medium', 'high', 'critical'];
-  for (let k = a; k < b; k++) {
-    const i = list ? list[k] : k, r = cap.pk[i], s = r.s, sv = cap.pkSev[i];
-    html += `<div class="prow${i === S.sel ? ' sel' : ''}${sv ? ' th s-' + sevName[sv] : ''}" data-i="${i}" style="top:${k * RH}px"><div class="num dim">${i + 1}</div><div class="num">${(r.t - cap.t0).toFixed(6)}</div><div class="mono">${esc(s.src)}</div><div class="mono">${esc(s.dst)}</div><div>${protoPill(s.proto)}</div><div class="num">${r.len}</div><div title="${esc(s.info)}">${esc(s.info)}</div></div>`;
-  }
-  const sp = $('#pspace'); sp.innerHTML = html;
-  if (!n) sp.innerHTML = '<div class="empty">No packets match the current filter</div>';
-}
-function selectPacket(i, scroll) {
-  S.sel = i;
-  const pb = $('#pbody');
-  if (scroll && pb) { const list = S.idx, pos = list ? list.indexOf(i) : i; const y = pos * RH; if (y < pb.scrollTop || y > pb.scrollTop + pb.clientHeight - RH) pb.scrollTop = y - pb.clientHeight / 2; }
-  drawRows(); showDetail(i);
-}
-function showDetail(i) {
-  const cap = S.cap, r = cap.pk[i], s = r.s, bytes = pkBytes(cap, i);
-  const T = new Tree(); dissect(bytes, r.lt, T);
-  const det = cap.pkDet.get(i) !== undefined ? cap.threats[cap.pkDet.get(i)] : null;
-  const st = s.st !== undefined ? cap.streams[s.st] : null;
-  $('#dhead').innerHTML = `<h3>Frame ${i + 1}</h3><span class="pill">${r.len} bytes on wire${r.cap !== r.len ? ', ' + r.cap + ' captured' : ''}</span><span class="pill">${new Date(r.t * 1000).toISOString().replace('T', ' ').replace('Z', '')} UTC</span>${det ? `<span class="sev ${det.sev}" style="cursor:pointer" id="dthreat">${SVGI(SEV_ICON[det.sev], 14)}${esc(det.title)}</span>` : ''}<span style="flex:1"></span>${st ? `<button class="btn sm" id="dfollow">${SVGI(IC.stream, 14)}Follow ${st.l4} stream</button><button class="btn sm ghost" id="dconv">${SVGI(IC.filter, 14)}Conversation</button>` : ''}`;
-  if (det) $('#dthreat').onclick = () => { S.tsel = det.id; S.dirty.threats = 1; go('threats'); };
-  if (st) { $('#dfollow').onclick = () => followStream(st.id); $('#dconv').onclick = () => setExpr('stream:' + st.id); }
-  const frame = { name: 'Frame ' + (i + 1) + ': ' + r.len + ' bytes on wire, ' + r.cap + ' bytes captured', s: 0, l: bytes.length, f: [{ n: 'Arrival time', v: new Date(r.t * 1000).toISOString(), s: 0, l: 0 }, { n: 'Time since first frame', v: (r.t - cap.t0).toFixed(6) + ' s', s: 0, l: 0 }, { n: 'Frame length', v: r.len + ' bytes', s: 0, l: 0 }, { n: 'Link type', v: r.lt, s: 0, l: 0 }, { n: 'Protocols', v: T.layers.map(l => l.name.split(/[ ,:(]/)[0]).join(' › '), s: 0, l: 0 }] };
-  const layers = [frame].concat(T.layers);
-  if (!S.openLayers.size) layers.slice(-2).forEach(l => S.openLayers.add(l.name.split(/[,:(]/)[0].trim()));
-  $('#tree').innerHTML = layers.map((L, li) => {
-    const key = L.name.split(/[,:(]/)[0].trim();
-    return `<div class="layer ${S.openLayers.has(key) ? 'open' : ''}" data-k="${esc(key)}" data-s="${L.s}" data-l="${L.l}"><div class="lh">${SVGI(IC.car, 14).replace('<svg', '<svg class="car"')}<span>${esc(L.name)}</span><span class="bl">${li ? L.l + ' B' : ''}</span></div><div class="fs">${L.f.map(f => `<div class="fld d${f.d}" data-s="${f.s}" data-l="${f.l}"><span class="k">${esc(f.n)}</span><span class="v">${esc(f.v)}</span></div>`).join('')}</div></div>`;
-  }).join('');
-  // hex
-  const lim = Math.min(bytes.length, 4096), per = PHONE() ? 8 : 16;
-  let hx = '';
-  for (let o = 0; o < lim; o += per) {
-    hx += `<span class="o">${o.toString(16).padStart(4, '0')}</span>`;
-    let a = '';
-    for (let j = 0; j < per; j++) {
-      const k = o + j;
-      if (j === per / 2) hx += '<span class="g"></span>';
-      if (k < lim) { const b = bytes[k]; hx += `<span class="b${b ? '' : ' z'}" data-i="${k}">${h2(b)}</span>`; a += `<span class="a" data-i="${k}">${b >= 32 && b < 127 ? esc(String.fromCharCode(b)) : '·'}</span>`; }
-      else hx += '<span class="b">  </span>';
-    }
-    hx += `<span class="asc">${a}</span>\n`;
-  }
-  $('#hex').innerHTML = hx;
-  $('#hexsub').textContent = bytes.length > lim ? `showing first ${lim} of ${bytes.length} bytes` : bytes.length + ' bytes';
-  const hexEls = $$('#hex [data-i]');
-  const byIdx = new Map(); hexEls.forEach(e => { const k = +e.dataset.i; (byIdx.get(k) || byIdx.set(k, []).get(k)).push(e); });
-  const clear = cls => $$('#hex .' + cls).forEach(e => e.classList.remove(cls));
-  const mark = (s, l, cls) => { clear(cls); for (let k = s; k < s + l; k++) (byIdx.get(k) || []).forEach(e => e.classList.add(cls)); };
-  $$('#tree .lh').forEach(h => { h.onclick = () => { const L = h.parentElement; L.classList.toggle('open'); const k = L.dataset.k; L.classList.contains('open') ? S.openLayers.add(k) : S.openLayers.delete(k); }; h.onmouseenter = () => { const L = h.parentElement; mark(+L.dataset.s, +L.dataset.l, 'ly'); }; h.onmouseleave = () => clear('ly'); });
-  $$('#tree .fld').forEach(f => { f.onmouseenter = () => mark(+f.dataset.s, +f.dataset.l, 'on'); f.onmouseleave = () => clear('on'); });
-  $('#hex').onclick = e => {
-    const t = e.target.closest('[data-i]'); if (!t) return; const k = +t.dataset.i;
-    let best = null; $$('#tree .fld').forEach(f => { const s0 = +f.dataset.s, l = +f.dataset.l; if (l > 0 && k >= s0 && k < s0 + l && (!best || l < +best.dataset.l)) best = f; });
-    $$('#tree .fld.hl').forEach(f => f.classList.remove('hl'));
-    if (best) { best.closest('.layer').classList.add('open'); best.classList.add('hl'); best.scrollIntoView({ block: 'nearest' }); mark(+best.dataset.s, +best.dataset.l, 'on'); }
-  };
-}
-function followStream(id) {
-  const cap = S.cap, st = cap.streams[id];
-  let html = '', total = 0, cur = null, buf = '', cb = 0, sb = 0;
-  const flush = () => { if (cur && buf) html += `<span class="${cur} blk">${esc(buf)}</span>`; buf = ''; };
-  for (const i of st.pk) {
-    const s = cap.pk[i].s; if (!s.pll) continue;
-    const d = s.dirA ? 'c' : 's'; if (d === 'c') cb += s.pll; else sb += s.pll;
-    if (total > 300000) continue;
-    const t = payloadText(cap, i, 65536).replace(/[^\x09\x0a\x0d\x20-\x7e]/g, '·');
-    total += t.length;
-    if (d !== cur) { flush(); cur = d; }
-    buf += t;
-  }
-  flush();
-  $('#mtitle').innerHTML = `Follow ${st.l4} stream ${id} <span class="hint mono" style="font-weight:400;margin-left:8px">${esc(st.a)}:${st.ap} ⇄ ${esc(st.b)}:${st.bp}</span>`;
-  $('#mbody').innerHTML = `<div class="filt" style="margin-bottom:12px"><span class="lg" style="cursor:default"><i style="background:var(--s1)"></i>Client to server, ${fmtBytes(cb)}</span><span class="lg" style="cursor:default"><i style="background:var(--s2)"></i>Server to client, ${fmtBytes(sb)}</span><span class="pill">${st.pk.length} packets</span><span class="pill">${fmtDur(st.t1 - st.t0)}</span>${st.proto === 'TLS' ? '<span class="pill">Encrypted with TLS, so bytes are shown raw</span>' : ''}${total > 300000 ? '<span class="pill">truncated to 300 KB</span>' : ''}</div><div class="stream">${html || '<div class="empty">This stream carries no payload</div>'}</div>`;
-  $('#modal').classList.add('on');
-}
+/* the Packets view lives in packets.js */
 
 /* ===================== CONVERSATIONS ===================== */
 function renderConversations() {
@@ -764,19 +762,30 @@ $$('.tab').forEach(t => t.onclick = () => go(t.dataset.view));
 $('#mclose').onclick = () => $('#modal').classList.remove('on');
 $('#modal').onclick = e => { if (e.target.id === 'modal') $('#modal').classList.remove('on'); };
 $('#helpBtn').onclick = () => {
-  $('#mtitle').textContent = 'Filter syntax';
-  $('#mbody').innerHTML = `<div class="help"><p>Terms are combined with AND. Use <code>or</code> between groups. Prefix a term with <code>!</code> to negate it. Operators: <code>:</code> <code>==</code> <code>!=</code> <code>&gt;</code> <code>&lt;</code> <code>&gt;=</code> <code>&lt;=</code>.</p><table>
-  <tr><td><code>tcp</code> <code>dns</code> <code>tls</code> <code>arp</code> …</td><td>Protocol name</td></tr>
-  <tr><td><code>ip:10.0.0.5</code> <code>ip:10.0.0.0/24</code></td><td>Either address (also <code>src:</code> <code>dst:</code>)</td></tr>
-  <tr><td><code>port:443</code> <code>dport&lt;1024</code></td><td>Ports (also <code>sport:</code>)</td></tr>
-  <tr><td><code>len&gt;1000</code> <code>ttl&lt;10</code> <code>frame&gt;=500</code> <code>time&gt;30</code></td><td>Numeric comparisons</td></tr>
-  <tr><td><code>syn</code> <code>synack</code> <code>rst</code> <code>fin</code></td><td>TCP flags</td></tr>
-  <tr><td><code>stream:12</code></td><td>One TCP/UDP conversation</td></tr>
-  <tr><td><code>dns:example.com</code> <code>sni:github</code> <code>http:login</code> <code>ua:sqlmap</code> <code>status&gt;=400</code></td><td>Application fields (substring)</td></tr>
-  <tr><td><code>threat</code></td><td>Packets that are evidence in a detection</td></tr>
-  <tr><td><code>mac:aa:bb:cc:dd:ee:ff</code> <code>vlan:10</code></td><td>Link layer</td></tr>
-  <tr><td>anything else</td><td>Text search in addresses and the Info column</td></tr></table>
-  <p style="margin-top:12px">Example: <code>ip:10.0.0.20 !tls port:80 or dns</code></p></div>`;
+  $('#mtitle').textContent = 'Display filters';
+  const c = x => `<code data-try="${esc(x)}">${esc(x)}</code>`;
+  $('#mbody').innerHTML = `<div class="help"><p>Capsight reads Wireshark display filters, and its own short forms. The bar turns green when a filter is valid and red when it is not; press Enter to apply. Click any example to try it.</p><table>
+  <tr><td>${c('ip.addr == 10.0.0.20')} ${c('ip.src == 10.0.0.0/24')} ${c('eth.addr == aa:bb:cc:dd:ee:ff')}</td><td>Addresses (also <code>ip.dst</code>, <code>ipv6.addr</code>, <code>eth.src</code>)</td></tr>
+  <tr><td>${c('tcp.port == 443')} ${c('udp.dstport == 53')} ${c('tcp.stream eq 12')}</td><td>Ports and conversations</td></tr>
+  <tr><td>${c('tcp.flags.syn == 1 && tcp.flags.ack == 0')} ${c('tcp.flags.reset == 1')}</td><td>TCP flags</td></tr>
+  <tr><td>${c('http.request')} ${c('http.request.method == "POST"')} ${c('http.response.code >= 400')} ${c('http.host contains "intranet"')}</td><td>HTTP</td></tr>
+  <tr><td>${c('dns.qry.name matches "exfil.*"')} ${c('tls.handshake.extensions_server_name contains "github"')}</td><td>DNS and TLS</td></tr>
+  <tr><td>${c('frame contains "password"')} ${c('tcp[13:1] == 02')} ${c('ip[9:1] == 06')}</td><td>Bytes: text or hex anywhere, or a slice counted from a protocol's start</td></tr>
+  <tr><td>${c('frame.len > 1000')} ${c('frame.number <= 100')} ${c('frame.time_relative >= 30')} ${c('ip.ttl < 10')}</td><td>Numbers, with <code>== != &gt; &lt; &gt;= &lt;=</code> or <code>eq ne gt lt ge le</code></td></tr>
+  <tr><td>${c('frame.marked == 1')} ${c('frame.comment')} ${c('frame.coloring_rule.name == "TCP RST"')}</td><td>Your marks, comments and colouring rules</td></tr>
+  <tr><td>${c('(dns || http) && !(ip.addr == 10.0.0.31)')}</td><td>Combine with <code>&amp;&amp; || !</code> or <code>and or not</code>, and brackets</td></tr>
+  <tr><td>${c('threat')} ${c('ip:10.0.0.5 port:443')} ${c('syn')} ${c('dns:example')}</td><td>Capsight short forms: evidence for a detection, <code>key:value</code> substrings, bare flags and protocols</td></tr>
+  </table>
+  <h4 style="margin:18px 0 6px;color:var(--text)">Packet list</h4><table>
+  <tr><td>Right-click or long-press a packet</td><td>Apply or prepare it as a filter, conversation filters, colourise, follow, copy, export</td></tr>
+  <tr><td>Right-click a field in the details</td><td>Filter on that field; double-click applies it</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>M</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></td><td>Mark a packet / next marked packet</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd> · <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd></td><td>Ignore a packet · set a time reference</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>G</kbd> · <kbd>Ctrl</kbd>+<kbd>F</kbd></td><td>Go to a packet number · find a packet</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>.</kbd> / <kbd>Ctrl</kbd>+<kbd>,</kbd></td><td>Next / previous packet in the same conversation</td></tr>
+  <tr><td>Click a column heading</td><td>Sort; click again to reverse, a third time to reset</td></tr>
+  </table></div>`;
+  $$('#mbody [data-try]').forEach(x => x.onclick = () => { $('#modal').classList.remove('on'); setExpr(x.dataset.try); if (S.view !== 'packets') go('packets'); });
   $('#modal').classList.add('on');
 };
 document.addEventListener('keydown', e => {

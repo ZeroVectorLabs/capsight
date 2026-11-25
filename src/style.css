@@ -92,7 +92,8 @@ a.btn.ghost { color: var(--text-2); }
 .filterbar { display: flex; align-items: center; gap: 10px; padding: 0 22px 12px; }
 .fx { flex: 1; display: flex; align-items: center; gap: 8px; background: var(--gl); border: 1px solid var(--gl-edge); box-shadow: inset 0 1px 0 var(--gl-rim); border-radius: 999px; padding: 0 14px; height: 36px; min-width: 200px; }
 .fx:focus-within { border-color: var(--accent); }
-.fx.bad { border-color: var(--crit); }
+.fx.bad { border-color: var(--crit); background: color-mix(in srgb, var(--crit) 10%, var(--gl)); }
+.fx.good { border-color: color-mix(in srgb, var(--good) 70%, transparent); background: color-mix(in srgb, var(--good) 7%, var(--gl)); }
 .fx svg { width: 15px; height: 15px; color: var(--muted); flex: none; }
 .fx input { flex: 1; border: 0; outline: 0; background: transparent; color: var(--text); font: 13px "IBM Plex Mono", ui-monospace, monospace; height: 100%; min-width: 0; }
 .fx input::placeholder { color: var(--muted); }
@@ -197,9 +198,9 @@ main { padding: 22px; max-width: 1720px; margin: 0 auto; }
 .pp i { width: 8px; height: 8px; border-radius: 2px; }
 
 /* ---------- packets ---------- */
-.pk-wrap { display: grid; grid-template-rows: minmax(260px, 46vh) auto; gap: 14px; }
+.pk-wrap { display: grid; grid-template-rows: minmax(340px, 58vh) auto; gap: 14px; }
 .ptable { display: flex; flex-direction: column; overflow: hidden; }
-.phead, .prow { display: grid; grid-template-columns: 68px 100px minmax(120px, 1fr) minmax(120px, 1fr) 96px 64px minmax(200px, 3fr); align-items: center; }
+.phead, .prow { display: grid; grid-template-columns: 68px var(--tw, 100px) minmax(120px, 1fr) minmax(120px, 1fr) 96px 64px minmax(200px, 3fr); align-items: center; }
 .phead { font-size: 12.5px; color: var(--text-2); font-weight: 600; border-bottom: 1px solid var(--line-2); padding: 0 6px; height: 34px; flex: none; }
 .phead div, .prow div { padding: 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pbody { flex: 1; overflow: auto; position: relative; outline: none; }
@@ -649,6 +650,15 @@ a.btn { text-decoration: none; color: var(--text); }
   /* packet list: two lines per packet (number, addresses, protocol / time, info, length) */
   .pk-wrap { grid-template-rows: minmax(300px, 62vh) auto; }
   .phead { display: none; }
+  .ptools { gap: 6px; padding: 8px 10px; }
+  .ptools .sp, .ptools .ptf span, .ptools .pgo span, .ptools .pnav { display: none; }
+  .ptools #pfindBtn { padding: 5px 8px; }
+  .ptools .ptf select { max-width: 112px; }
+  .ptools .cp-switch { font-size: 12px; }
+  .pgo input { width: 64px; }
+  .ptf select { max-width: 120px; }
+  .pfind { flex-wrap: wrap; padding: 8px 10px; } .pfind input { flex: 1 1 140px; }
+  .pstatus { padding: 6px 10px; gap: 4px 12px; }
   .prow { height: 51px; padding: 6px 10px; grid-template-columns: 46px minmax(0, 1fr) minmax(0, 1fr) auto; grid-template-rows: auto auto; row-gap: 3px; align-content: center; border-bottom: 1px solid var(--line); }
   .prow:nth-child(even) { background: transparent; }
   .prow.sel { background: var(--accent-soft); }
@@ -705,3 +715,73 @@ a.btn { text-decoration: none; color: var(--text); }
 .seqlist b { font-size: 14px; font-weight: 600; }
 .seqlist span { font-size: 12.5px; color: var(--text-2); overflow-wrap: anywhere; }
 .seqlist span.mono { font-size: 12px; color: var(--text); }
+
+/* ---------- packets: toolbar, status, Wireshark colouring and states ---------- */
+.ptools { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; flex: none; }
+.ptools .sp { flex: 1; }
+.pgo, .ptf { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-2); }
+.pgo input, .ptf select, .pfind input, .pfind select { font: inherit; font-size: 12.5px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 4px; padding: 5px 8px; }
+.pgo input { width: 84px; }
+.pgo input:focus, .pfind input:focus, .ptf select:focus, .pfind select:focus { outline: 2px solid var(--text); outline-offset: 0; }
+.pnav { display: inline-flex; gap: 0; }
+.pnav .btn { padding: 5px; }
+.pfind { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel-2); flex: none; }
+.pfind input { flex: 1; min-width: 0; font-family: "IBM Plex Mono", monospace; }
+.phead div[data-c] { cursor: pointer; user-select: none; }
+.phead div[data-c]:hover { color: var(--text); }
+.phead div.sorted { color: var(--text); }
+.phead i { font-style: normal; font-size: 10px; }
+.pstatus { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; padding: 7px 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); flex: none; }
+.pstatus b { color: var(--text-2); font-weight: 600; }
+.pstatus .sp { flex: 1; }
+.pcm { color: var(--high); margin-left: 4px; }
+/* Wireshark's default colouring rules, as tints that work in both themes */
+.pkcolor .prow[class*="cr-"] { background: color-mix(in srgb, var(--rc) var(--rcp, 16%), transparent); }
+:root[data-theme="light"] .pkcolor .prow[class*="cr-"] { --rcp: 42%; }
+.prow.cr-tcp { --rc: #a59cff; } .prow.cr-udp { --rc: #7fc4ff; } .prow.cr-http { --rc: #9be86b; } .prow.cr-arp { --rc: #f3e27a; }
+.prow.cr-icmp { --rc: #f29cf5; } .prow.cr-smb { --rc: #f7ee8c; } .prow.cr-route { --rc: #ffd38a; } .prow.cr-synfin { --rc: #9a9a9a; }
+.pkcolor .prow.cr-rst { background: color-mix(in srgb, #c0262f 55%, transparent); color: #fff6a8; }
+.pkcolor .prow.cr-rst .dim, .pkcolor .prow.cr-rst .pp { color: #fff6a8; }
+.pkcolor .prow.cr-bad { background: #000; color: #ff6b6b; }
+.prow.cc { background: color-mix(in srgb, var(--cc) 45%, transparent) !important; }
+:root[data-theme="dark"] .prow.cc { background: color-mix(in srgb, var(--cc) 30%, transparent) !important; }
+.prow.mk, .prow.mk.sel { background: var(--ink-bg) !important; color: var(--ink-fg); }
+.prow.mk .dim, .prow.mk .pp { color: var(--ink-fg); }
+.prow.ig { opacity: .5; font-style: italic; }
+.prow.sel:not(.mk) { box-shadow: inset 0 0 0 2px var(--accent); }
+.layer.cmt > .lh { color: var(--high); }
+.layer.cmt .fld .v { font-family: inherit; white-space: pre-wrap; }
+.pcmt { width: 100%; font: inherit; font-size: 14px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 4px; padding: 10px; resize: vertical; }
+.fopts { display: flex; flex-wrap: wrap; gap: 8px 12px; }
+.fdot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+.fdot.c { background: var(--s1); } .fdot.s { background: var(--s2); }
+/* context menu */
+.ctx { position: fixed; z-index: 300; min-width: 240px; max-width: 360px; background: var(--panel-3); border: 1px solid var(--line-2); border-radius: 6px; padding: 4px; box-shadow: 0 12px 32px rgba(0,0,0,.35); font-size: 13px; }
+:root[data-theme="light"] .ctx { background: #fff; box-shadow: 0 12px 32px rgba(11,27,51,.16); }
+.ctx-list { display: flex; flex-direction: column; }
+.ctx-row { position: relative; }
+.ctx-it { display: flex; align-items: center; gap: 14px; width: 100%; padding: 6px 10px; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; border-radius: 4px; }
+.ctx-it:hover:not(:disabled), .ctx-it:focus-visible, .ctx-row.open > .ctx-it { background: var(--hover); outline: none; }
+.ctx-it:focus-visible { box-shadow: inset 0 0 0 1px var(--text-2); }
+.ctx-it:disabled { color: var(--muted); cursor: default; opacity: .6; }
+.ctx-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ctx-t small { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+.ctx kbd { font: 11px "IBM Plex Mono", monospace; color: var(--muted); }
+.ctx-car { color: var(--muted); }
+.ctx-sep { height: 1px; background: var(--line-2); margin: 4px 6px; }
+.ctx-sub { display: none; position: absolute; left: 100%; top: -5px; min-width: 230px; max-width: 360px; background: inherit; border: 1px solid var(--line-2); border-radius: 6px; padding: 4px; box-shadow: 0 12px 32px rgba(0,0,0,.3); background: var(--panel-3); }
+:root[data-theme="light"] .ctx-sub { background: #fff; box-shadow: 0 12px 32px rgba(11,27,51,.16); }
+.ctx-row.open > .ctx-sub { display: flex; }
+.ctx-sw { display: grid; grid-template-columns: repeat(5, 28px); gap: 6px; padding: 8px; }
+.ctx-sw button { width: 28px; height: 22px; border: 1px solid rgba(0,0,0,.25); border-radius: 3px; cursor: pointer; }
+.ctx-sw button:hover, .ctx-sw button:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.ctx.sheet { left: 0; right: 0; bottom: 0; top: auto; max-width: none; min-width: 0; border-radius: 14px 14px 0 0; padding: 6px 8px calc(10px + env(safe-area-inset-bottom)); max-height: 72vh; overflow: auto; font-size: 15px; }
+.ctx.sheet .ctx-bd { position: fixed; inset: 0; z-index: -1; background: rgba(0,0,0,.35); }
+.ctx.sheet .ctx-h { font-weight: 650; padding: 10px 10px 6px; font-size: 14px; color: var(--text-2); }
+.ctx.sheet .ctx-it { padding: 11px 10px; }
+.ctx.sheet kbd { display: none; }
+.ctx.sheet .ctx-sub { position: static; box-shadow: none; border: 0; border-left: 2px solid var(--line-2); border-radius: 0; margin: 0 0 4px 14px; padding: 0 0 0 4px; max-width: none; background: transparent; }
+.ctx.sheet .ctx-row.open > .ctx-it .ctx-car { transform: rotate(90deg); }
+.help code[data-try] { cursor: pointer; display: inline-block; margin: 2px 2px 2px 0; }
+.help code[data-try]:hover { background: var(--ink-bg); color: var(--ink-fg); }
+.help kbd { font: 11.5px "IBM Plex Mono", monospace; border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 3px; padding: 0 4px; color: var(--text); }
