@@ -677,6 +677,27 @@ const AI_TEXT = [
   ['Numbered "Step" comments', /^\s*(#|\/\/|--|REM|')\s*Step \d+\s*[:.)-]/im, false],
   ['Fill-in placeholders', /\b(YOUR_[A-Z_]{3,}|your[-_](server|domain|ip|api[-_]key)[-_]here|<your[-_ ][\w -]{3,30}>|replace (this|with your))\b/i, false],
 ];
+// User-Agents that AI attack frameworks send themselves. From the frameworks' source code as published in the
+// open detection packs (Theori aipt-detections, ThreatDefence agentic-attack-detections, ARTEX-NSM) and Theori's
+// lab report on ARTEX and CyberStrikeAI (November 2026).
+const AI_FRAMEWORK_UA = [
+  [/\bartex[-/ ]|artex\)|\bARTEX-worker\/|ArtExVerify|\bscopeweaver\b/i, 'ARTEX'],
+  [/^norma\/\d/i, 'ARTEX (its WebFetch client, norma)'],
+  [/spa-api-recon/i, 'ARTEX (its api-recon skill)'],
+  [/CyberStrikeAI|^cyberstrike\//i, 'CyberStrikeAI'],
+  [/HexStrike|\(Compatible Exploit( Scanner)?\)/i, 'HexStrike-AI'],
+  [/LuaN1aoAgent/i, 'LuaN1aoAgent'],
+  [/^PentAGI\//i, 'PentAGI'],
+  [/^agent-zero\//i, 'Agent Zero'],
+  [/RedAmon/i, 'RedAmon'],
+  [/xalgorix/i, 'Xalgorix'],
+  [/pentestswarm-/i, 'Pentest Swarm AI'],
+  [/PentestGPT/i, 'PentestGPT'],
+];
+// AI coding agents: normal on a developer's machine, telling only on a host that is part of an attack
+const AI_ASSISTANT_UA = [[/claude-code|Claude-User/i, 'Claude Code'], [/QwenCode/i, 'Qwen Code'], [/codex[-_ ]cli|\bcodex\/\d/i, 'Codex CLI'], [/gemini-cli/i, 'Gemini CLI'], [/aider\/\d/i, 'Aider']];
+// out-of-band callback services that scanners and AI agents use to confirm blind vulnerabilities
+const OAST = /(^|\.)(dnslog\.cn|ceye\.io|oast\.(fun|live|site|online|me|pro)|oastify\.com|interact\.sh|burpcollaborator\.net|webhook\.site|requestbin\.(net|com)|pipedream\.net|canarytokens\.com)$/i;
 function aiTextSigns(t) {
   try { t = new TextDecoder().decode(Uint8Array.from(t, c => c.charCodeAt(0) & 255)); } catch (e) {} // bytes → UTF-8, so emoji are seen
   const hits = [];
@@ -709,6 +730,24 @@ function aiAssess(cap, D, add) {
     const who = download ? r.s.dst : r.s.src, peer = download ? r.s.src : r.s.dst;
     aiTools.push({ who, peer, path, download, hits, ev: [h.reqIdx, r.i].filter(x => x !== undefined) });
   }
+  const fw = new Map(), asst = new Map(), oast = new Map();
+  for (const r of pk) {
+    const s = r.s, h = s.http;
+    if (h && !h.resp && h.ua) {
+      const f = AI_FRAMEWORK_UA.find(([re]) => re.test(h.ua));
+      if (f) { const fam = f[1].split(' (')[0], k = s.src + '|' + fam; let o = fw.get(k); if (!o) { o = { src: s.src, tool: fam, uas: new Set(), dsts: new Set(), ev: [] }; fw.set(k, o); } o.uas.add(h.ua); o.dsts.add(s.dst); o.ev.push(r.i); if (h.respIdx !== undefined) o.ev.push(h.respIdx); }
+      const a2 = AI_ASSISTANT_UA.find(([re]) => re.test(h.ua));
+      if (a2) { let o = asst.get(s.src); if (!o) { o = { tools: new Set(), uas: new Set(), ev: [] }; asst.set(s.src, o); } o.tools.add(a2[1]); o.uas.add(h.ua); o.ev.push(r.i); }
+    }
+    const nm = (s.sni || (s.dns && !s.dns.qr && s.dns.qs[0] ? s.dns.qs[0].name : '') || (h && !h.resp ? (h.host || '').split(':')[0] : '')).replace(/\.$/, '');
+    if (nm && OAST.test(nm)) { let o = oast.get(s.src); if (!o) { o = { names: new Set(), ev: [] }; oast.set(s.src, o); } o.names.add(nm); o.ev.push(r.i); }
+  }
+  for (const o of fw.values()) add({ type: 'aiframework', title: 'AI attack framework: ' + o.tool, sev: 'critical', stage: 'resource', tech: 'T1588.007', techName: 'Obtain Capabilities: Artificial Intelligence', src: o.src, dst: [...o.dsts][0] + (o.dsts.size > 1 ? ' +' + (o.dsts.size - 1) : ''), count: o.ev.length,
+    summary: o.src + ' sent requests with the User-Agent of ' + o.tool + ', an autonomous AI penetration-testing framework, to ' + [...o.dsts].slice(0, 4).join(', ') + (o.dsts.size > 4 ? ', …' : '') + '. The framework names itself, so this is a fingerprint, not a guess; whether the run was authorised is for you to check.',
+    details: [['Framework', o.tool], ['User-Agents', [...o.uas].join('\n')], ['Targets', [...o.dsts].join(', ')], ['Requests', o.ev.length]], ev: o.ev.sort((x, y) => x - y) });
+  for (const [src, o] of oast) if (o.names.size) add({ type: 'oast', title: 'Out-of-band callback service: ' + [...o.names][0], sev: 'medium', stage: 'c2', tech: 'T1102', techName: 'Web Service', src, dst: [...o.names][0], count: o.ev.length,
+    summary: src + ' contacted ' + [...o.names].join(', ') + '. Scanners and AI agents use these callback services to confirm blind injection and SSRF; from a server, it often means an injected payload ran.',
+    details: [['Names', [...o.names].join('\n')], ['Packets', o.ev.length]], ev: o.ev });
   for (const o of aiTools) add({ type: 'aitool', title: 'Tool written with AI: ' + o.path.split('/').pop(), sev: 'high', stage: 'resource', tech: 'T1588.007', techName: 'Obtain Capabilities: Artificial Intelligence', src: o.who, dst: o.peer, count: o.hits.length,
     summary: o.who + (o.download ? ' downloaded ' : ' uploaded ') + o.path + (o.download ? ' from ' : ' to ') + o.peer + '. The file reads as if an AI assistant wrote it: ' + o.hits.map(x => x.name.toLowerCase()).join(', ') + '.',
     details: o.hits.map(x => [x.name + (x.strong ? ' (strong)' : ''), x.line]), ev: o.ev });
@@ -723,6 +762,8 @@ function aiAssess(cap, D, add) {
   const involved = new Set(D.flatMap(d => [d.src, d.dst, ...(d.targets || [])]));
   const cands = new Set([...bySrc.keys()].filter(ip => !isPrivate(ip) || bySrc.get(ip).some(d => ['lateral', 'hscan', 'ldaprecon', 'kerberoast', 'imds', 'exfil'].includes(d.type))));
   for (const ip of llm.keys()) if (involved.has(ip)) cands.add(ip);
+  for (const o of fw.values()) cands.add(o.src);
+  for (const ip of asst.keys()) if (involved.has(ip)) cands.add(ip);
   for (const o of aiTools) { if (involved.has(o.who) && cands.has(o.peer) === false && !isPrivate(o.peer)) cands.add(o.peer); }
   const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
   const cvOf = a => { const m = mean(a); return m ? Math.sqrt(mean(a.map(x => (x - m) ** 2))) / m : 1; };
@@ -775,16 +816,24 @@ function aiAssess(cap, D, add) {
     // 7. talks to an AI model API itself
     const L = llm.get(src);
     if (L) sign('llm', 'Talks to an AI model API', 3, true, src + ' connected to ' + [...L.names].join(', ') + (isPrivate(src) ? ' while it was part of the attack: an agent may be running on it.' : '.'), L.ev);
+    // 9. the framework named itself
+    const F = [...fw.values()].filter(o => o.src === src);
+    if (F.length) sign('framework', 'Identified itself as an AI attack framework', 5, true, F.map(o => o.tool + ' (' + [...o.uas].slice(0, 3).join(', ') + ')').join('; ') + '.', F.flatMap(o => o.ev));
+    const AS = asst.get(src);
+    if (AS && (involved.has(src) || F.length)) sign('assistant', 'AI coding agent running on this host', 2, true, [...AS.tools].join(', ') + ' (' + [...AS.uas].slice(0, 2).join(', ') + ') was active on a host that is part of the attack.', AS.ev);
+    const OB = oast.get(src);
+    if (OB) sign('oast', 'Used out-of-band callback services', 1, false, [...OB.names].slice(0, 4).join(', ') + ': how agents and scanners confirm blind vulnerabilities.', OB.ev);
     // 8. the tools themselves were written by an AI
     const T = aiTools.filter(o => o.who === src || o.peer === src);
     if (T.length) sign('aicode', 'Tools or payloads written by AI', 2, true, T.map(o => o.path.split('/').pop() + ': ' + o.hits.map(x => x.name.toLowerCase()).join(', ')).join('; ') + '.', T.flatMap(o => o.ev));
     const score = signs.reduce((a, x) => a + x.weight, 0), strong = signs.filter(x => x.strong).length;
     if (!strong || score < 3) continue;
+    if (signs.length === 1 && signs[0].key === 'framework') continue; // the framework detection already says it all
     const onHost = isPrivate(src) && !!L; // an agent running on one of our own machines
-    const sure = onHost || (score >= 5 && strong >= 2);
+    const sure = onHost || F.length > 0 || (score >= 5 && strong >= 2);
     const ev = [...new Set(signs.flatMap(x => x.ev))].sort((a, b) => a - b);
     const dst = onHost ? ([...cap.llmIps].find(([, n]) => L.names.has(n)) || [[...L.names][0]])[0] : mine.length ? [...new Set(mine.map(d => d.dst))].filter(isIp)[0] || mine[0].dst : '';
-    add({ type: 'ai', title: onHost ? 'AI agent at work on compromised host ' + src : (sure ? 'AI-driven attack' : 'Possibly AI-driven attack') + ': ' + signs.length + ' sign' + (signs.length > 1 ? 's' : '') + ' of an AI agent', sev: onHost ? 'high' : sure ? 'critical' : 'medium', stage: 'resource', tech: 'T1588.007', techName: 'Obtain Capabilities: Artificial Intelligence', src, dst, count: signs.length, ai: { score, strong, sure },
+    add({ type: 'ai', title: F.length && !onHost ? 'AI-driven attack by ' + F.map(o => o.tool.split(' (')[0]).filter((v, i, a) => a.indexOf(v) === i).join(', ') + ': ' + signs.length + ' sign' + (signs.length > 1 ? 's' : '') : onHost ? 'AI agent at work on compromised host ' + src : (sure ? 'AI-driven attack' : 'Possibly AI-driven attack') + ': ' + signs.length + ' sign' + (signs.length > 1 ? 's' : '') + ' of an AI agent', sev: onHost ? 'high' : sure ? 'critical' : 'medium', stage: 'resource', tech: 'T1588.007', techName: 'Obtain Capabilities: Artificial Intelligence', src, dst, count: signs.length, ai: { score, strong, sure },
       t0: pk[ev[0]].t, t1: pk[ev[ev.length - 1]].t, signs,
       summary: (onHost ? src + ' was part of the attack and kept calling an AI model API (' + [...L.names].join(', ') + '): an AI agent is likely running on it, deciding the next steps. ' : sure ? src + ' behaves like an AI agent, not a person or a plain scanner. ' : src + ' shows some signs of an AI agent. ') + 'The signs: ' + signs.map(x => x.name[0].toLowerCase() + x.name.slice(1)).join('; ') + '. Each one is listed with its packets below.',
       details: signs.map(x => [x.name + (x.strong ? ' (strong)' : ''), x.detail]).concat([['Score', score + ' (' + strong + ' strong sign' + (strong === 1 ? '' : 's') + '; a verdict needs at least one strong sign)']]), ev });
@@ -821,7 +870,7 @@ function buildAttackFlow(cap, D) {
     else if (id === 'Spoofed sources') a.role = 'Botnet / spoofed';
     else if (id === 'LAN hosts') a.role = 'Internal network';
     else if (!mac && !isIp(id)) a.role = 'External domain';
-    else if (!priv && asSrc.length) a.role = D.some(d => d.type === 'ai' && d.src === id && d.ai.sure) ? 'AI-driven attacker' : 'Attacker';
+    else if (!priv && asSrc.length) a.role = D.some(d => d.src === id && ((d.type === 'ai' && d.ai.sure) || d.type === 'aiframework')) ? 'AI-driven attacker' : 'Attacker';
     else if (priv && asSrc.some(s => ['lateral', 'beacon', 'shell', 'exfil', 'dnstunnel', 'sweep', 'hscan'].includes(s.d.type)) || (asSrc.some(s => s.d.type === 'download') && asSrc.length > 1 && asSrc.some(s => s.d.type !== 'download' && s.d.type !== 'cleartext'))) a.role = 'Compromised host';
     else if (priv && asSrc.some(s => s.d.type === 'download')) a.role = 'At-risk host';
     else if (priv && asSrc.some(s => s.d.type === 'arpspoof')) a.role = 'Rogue insider';

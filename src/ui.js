@@ -108,7 +108,7 @@ function setCapture(cap) {
   const n = cap.threats.length, crit = cap.threats.filter(d => d.sev === 'critical').length;
   const b = $('#tbadge'); b.textContent = n; b.className = 'badge' + (n ? '' : ' ok'); b.style.background = n && !crit ? 'var(--high)' : '';
   // AI-driven attacks are called out everywhere: a marker on the Threats tab, a notice, and a tag on every evidence packet
-  cap.aiD = cap.threats.filter(d => d.type === 'ai' || d.type === 'aitool').sort((x, y) => (y.type === 'ai') - (x.type === 'ai') || (y.ai?.sure ? 1 : 0) - (x.ai?.sure ? 1 : 0));
+  cap.aiD = cap.threats.filter(d => d.type === 'ai' || d.type === 'aitool' || d.type === 'aiframework').sort((x, y) => (y.type === 'aiframework') - (x.type === 'aiframework') || (y.type === 'ai') - (x.type === 'ai') || (y.ai?.sure ? 1 : 0) - (x.ai?.sure ? 1 : 0));
   cap.aiEv = new Map(); cap.aiD.forEach(d => (d.signs || [{ name: d.title, ev: d.ev }]).forEach(g => g.ev.forEach(i => { if (!cap.aiEv.has(i)) cap.aiEv.set(i, g.name); })));
   $('#aitab').classList.toggle('hidden', !cap.aiD.length);
   if (cap.aiD.length) setTimeout(() => toast(aiHeadline(cap) + '. Open Threats for the evidence.'), 700);
@@ -733,6 +733,7 @@ function drawSequence() {
 function aiHeadline(cap) {
   const d = cap.aiD[0]; if (!d) return '';
   if (d.type === 'aitool') return 'A tool written with AI was used in this capture';
+  if (d.type === 'aiframework') return 'AI attack framework detected: ' + d.title.replace('AI attack framework: ', '') + ' from ' + d.src;
   if (d.title.startsWith('AI agent at work')) return 'An AI agent is at work on ' + d.src;
   return (d.ai.sure ? 'AI-driven attack detected' : 'Possible AI-driven attack') + ' from ' + d.src;
 }
@@ -740,12 +741,12 @@ function aiHeadline(cap) {
 function aiAlertHtml(cap) {
   if (!cap.aiD || !cap.aiD.length) return '';
   const main = cap.aiD.find(d => d.type === 'ai') || cap.aiD[0];
-  const signs = main.signs ? main.signs : main.details.map(([k]) => ({ name: k.replace(/ \(strong\)$/, ''), strong: / \(strong\)$/.test(k) }));
+  const signs = main.signs ? main.signs : main.type === 'aiframework' ? (main.details.find(([k]) => k === 'User-Agents') || ['', ''])[1].split('\n').map(u => ({ name: 'User-Agent: ' + u, strong: true })) : main.details.map(([k]) => ({ name: k.replace(/ \(strong\)$/, ''), strong: / \(strong\)$/.test(k) }));
   const others = cap.aiD.filter(d => d !== main);
   return `<div class="aialert" data-aid="${main.id}"><span class="aibadge">AI</span><div class="aia-t"><h4>${esc(aiHeadline(cap))}</h4>
     <p>${main.type === 'ai' ? esc(main.src) + ' shows ' + signs.length + ' sign' + (signs.length > 1 ? 's' : '') + ' of an AI agent, ' + main.ai.strong + ' of them strong' + (main.ai.sure ? '. It moves at machine speed and retries, so act quickly.' : '. Check the evidence before you decide.') : esc(main.summary)}</p>
     <div class="aia-signs">${signs.map(g => `<span class="${g.strong ? 'st' : ''}">${esc(g.name)}</span>`).join('')}</div>
-    ${others.length ? `<p class="aia-more">Also: ${others.map(d => esc(d.title)).join(' · ')}</p>` : ''}</div><button class="btn primary sm" data-aiopen="${main.id}">See the evidence</button></div>`;
+    ${others.length ? `<p class="aia-more">Also: ${[...new Set(others.map(d => d.type === 'aiframework' ? d.title.replace('AI attack framework: ', '') + ' from ' + d.src : d.title))].map(esc).join(' · ')}</p>` : ''}</div><button class="btn primary sm" data-aiopen="${main.id}">See the evidence</button></div>`;
 }
 function wireAiAlert(el) { $$('[data-aiopen]', el).forEach(b => b.onclick = e => { e.stopPropagation(); S.tsel = +b.dataset.aiopen; S.dirty.threats = 1; go('threats'); }); }
 // the evidence behind an AI verdict: one row per sign, each with the packets that show it

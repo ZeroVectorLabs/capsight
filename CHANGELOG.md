@@ -4,6 +4,8 @@ Notable changes to Capsight, newest first.
 
 ## 4.0.0 (2026-11-25)
 
+- **AI attack framework fingerprints:** traffic that names an AI attack framework (ARTEX and its forks, CyberStrikeAI, HexStrike-AI, LuaN1aoAgent, PentAGI, Agent Zero, RedAmon, Xalgorix, Pentest Swarm AI, PentestGPT) is raised as **AI attack framework**, and its sender is labelled **AI-driven attacker**. AI coding agents (Claude Code, Qwen Code, Codex CLI, Gemini CLI, Aider) count as a sign on hosts that are part of an attack, and out-of-band callback services (dnslog, oast, interact.sh, webhook.site) get their own detection. Checked against the 8 sample captures published with the ARTEX detection packs.
+
 - **Wireshark display filters:** the filter bar now reads Wireshark's syntax: field names like `ip.addr`, `tcp.port`, `tcp.flags.syn`, `http.request.method`, `dns.qry.name` and `tls.handshake.extensions_server_name`; `== != > < >= <=` and `eq ne gt lt ge le`; `contains` and `matches`; byte slices like `tcp[13:1] == 02`; and `&& || !`, `and or not` with brackets. The bar turns green or red as you type, and Enter applies the filter. Capsight's short forms still work.
 - **Right-click a packet** (long-press on a phone) for Wireshark's packet menu: Apply as filter and Prepare as filter in all six forms, conversation filters, colourise conversation, follow TCP/UDP/TLS/HTTP stream, mark, ignore, time reference, packet comment, copy (summary, CSV, value, filter, hex dump, hex stream, text, escaped) and export the packet's bytes or the packet as .pcapng.
 - **Right-click a field** in the packet details to filter on it, copy it or export its bytes; double-click applies it as a filter. Fields without a named filter use a byte slice counted from their protocol's start.
