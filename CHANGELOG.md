@@ -2,13 +2,12 @@
 
 Notable changes to Capsight, newest first.
 
-## Unreleased
+## 3.1.1 (2026-11-25)
 
-- **Capture page:** capturing now happens inside Capsight. The Capture button opens a page that connects to the Capsight Capture helper (which now runs in the background with no window of its own), shows the computer checks, a drop-down list of network ports, filter and stop options, live counters with a traffic graph, and a **Saved captures** list kept in the browser (IndexedDB) with open, download and delete. Captures expire after 1, 7 or 30 days, or stay until deleted. Follows the light and dark theme.
-
-- **Capture live traffic:** a new button on the start page and **Capture** in the top bar. It opens **Capsight Capture** (`capture/`), a small helper for Mac, Windows and Linux that checks what the computer can capture, lets you pick the network port, filter and stop condition, records to `.pcap` with live counters, and sends the capture straight back into the Capsight tab. If the helper isn't running, the dialog has the download and steps to start it.
-
-- **Shorter, clearer findings report:** it now opens with the verdict, an "At a glance" list (attacker, compromised hosts, C2, malware hosts) and "What to do now" steps built from the capture, then the **attack flow diagram** and the **network map**, a single timeline of every detection, and only the indicators, passwords and files that need action. Benign IP and domain lists, the separate tactics table and the host inventory are gone. Both diagrams are drawn as vector graphics in the web page and PDF, and as images in Word and Markdown.
+- **Capture live traffic:** record from a network port on your computer and analyse it straight away. The **Capture live traffic** button on the start page, or **Capture** in the top bar, opens the Capture page inside Capsight. It connects to **Capsight Capture** (`capture/`), a small open-source helper for Mac, Windows and Linux that runs in the background, because browsers can't read network ports. The page shows what your computer can capture with a fix for anything missing, a drop-down list of network ports, an optional filter and stop condition, and live counters with a traffic graph, top protocols and busiest addresses. It follows the light and dark theme.
+- **Saved captures:** every finished capture is kept in your browser (IndexedDB) on this computer, never uploaded, with open, download and delete, and **Delete all**. Captures are removed after 1, 7 or 30 days, or kept until you delete them. Turn on **Keep a copy on disk** to also keep `.pcap` files in `~/Captures`.
+- The helper's API only answers Capsight's own site, on loopback, and the page explains how to update when an older helper is running. On a Mac it starts with `bash "Capsight Capture.command"` in Terminal, which avoids macOS's "could not verify" warning.
+- **Shorter, clearer findings report:** it opens with the verdict, an "At a glance" list (attacker, compromised hosts, C2, malware hosts) and "What to do now" steps built from the capture, then the **attack flow diagram** and the **network map**, a single timeline of every detection, and only the indicators, passwords and files that need action. Benign IP and domain lists, the separate tactics table and the host inventory are gone. Both diagrams are drawn as vector graphics in the web page and PDF, and as images in Word and Markdown.
 
 ## 3.0.0 (2026-11-24)
 
