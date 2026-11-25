@@ -666,8 +666,53 @@ function detectThreats(cap) {
 const LLM_API = /(^|\.)(api\.openai\.com|api\.anthropic\.com|generativelanguage\.googleapis\.com|aiplatform\.googleapis\.com|api\.x\.ai|api\.mistral\.ai|api\.groq\.com|openrouter\.ai|api\.deepseek\.com|api\.together\.xyz|api\.cohere\.(ai|com)|api\.perplexity\.ai|api\.fireworks\.ai|openai\.azure\.com|bedrock-runtime\.[\w-]+\.amazonaws\.com|api\.moonshot\.cn|dashscope\.aliyuncs\.com|ollama\.com)$/i;
 const AGENT_UA = /(python-httpx|python-requests|aiohttp|Go-http-client|node-fetch|axios|undici|okhttp|libwww-perl|httpie|langchain|llama[-_ ]?index|crewai|autogen|browser-use|openai|anthropic|HeadlessChrome|Playwright|puppeteer)/i;
 const API_MAP = /(swagger(\.json|\/v\d+\/swagger\.json|-ui)?|openapi\.(json|ya?ml)|api-docs|\.well-known\/(openid-configuration|ai-plugin\.json|mcp|security\.txt)|graphql|robots\.txt|sitemap\.xml|llms\.txt)(\?|$)/i;
+// Text an AI assistant leaves in code it writes: chat preambles, self-references, attributions,
+// markdown fences, emoji status lines, numbered "Step" comments, fill-in placeholders.
+const AI_TEXT = [
+  ['Chat-style preamble', /\b(Sure|Certainly|Absolutely|Of course)[!,.]?\s+(here('s| is| are)|below is)\b|\bHere('s| is) (a|an|the|your) [\w -]{0,40}(script|code|payload|function|tool|program)\b/i, true],
+  ['Mentions being an AI', /\bAs an AI\b|\bI('m| am) an AI\b|\blanguage model\b/i, true],
+  ['Credits an AI', /\b(generated|written|created|assisted|produced) (by|with|using) (ChatGPT|GPT-?[\d.o]*|Claude|Copilot|Gemini|Grok|Codex|Cursor|(an? )?(AI|LLM)( assistan(t|ce))?)\b/i, true],
+  ['Markdown code fence', /```[a-z]*\r?\n/i, false],
+  ['Emoji status lines', /[✅❌⚠\u{1F680}\u{1F512}\u{1F50D}\u{1F4E6}\u{1F389}\u{1F525}]/u, false],
+  ['Numbered "Step" comments', /^\s*(#|\/\/|--|REM|')\s*Step \d+\s*[:.)-]/im, false],
+  ['Fill-in placeholders', /\b(YOUR_[A-Z_]{3,}|your[-_](server|domain|ip|api[-_]key)[-_]here|<your[-_ ][\w -]{3,30}>|replace (this|with your))\b/i, false],
+];
+function aiTextSigns(t) {
+  try { t = new TextDecoder().decode(Uint8Array.from(t, c => c.charCodeAt(0) & 255)); } catch (e) {} // bytes → UTF-8, so emoji are seen
+  const hits = [];
+  const steps = (t.match(/^\s*(#|\/\/|--|REM|')\s*Step \d+\s*[:.)-]/gim) || []).length;
+  for (const [name, re, strong] of AI_TEXT) { if (name.startsWith('Numbered') && steps < 3) continue; const m = t.match(re); if (m) { const line = t.slice(Math.max(0, t.lastIndexOf('\n', m.index) + 1), t.indexOf('\n', m.index) < 0 ? t.length : t.indexOf('\n', m.index)).trim(); hits.push({ name, strong, line: line.length > 110 ? line.slice(0, 110) + '…' : line }); } }
+  return hits;
+}
+// the body of an HTTP message, across the packets that carry it
+function httpBodyText(cap, i, max) {
+  const r = cap.pk[i], s = r.s; if (s.st === undefined) return payloadText(cap, i, max);
+  const st = cap.streams[s.st]; let out = '', on = false;
+  for (const j of st.pk) { if (j === i) on = true; if (!on) continue; const q = cap.pk[j].s; if (j !== i && (q.http || q.dirA !== s.dirA)) { if (q.http) break; continue; } if (q.pll) out += payloadText(cap, j, max); if (out.length >= max) break; }
+  const k = out.indexOf('\r\n\r\n'); return k >= 0 && /^(HTTP\/|[A-Z]+ \S+ HTTP\/)/.test(out) ? out.slice(k + 4) : out;
+}
 function aiAssess(cap, D, add) {
   const pk = cap.pk;
+  // tools and payloads that read as if an AI wrote them (scripts downloaded, files uploaded)
+  const aiTools = [];
+  for (const r of pk) {
+    const h = r.s.http; if (!h) continue;
+    const upload = !h.resp && h.method === 'POST' && (h.body || '').length > 40;
+    const download = h.resp && h.status === 200 && h.reqIdx !== undefined;
+    if (!upload && !download) continue;
+    const req = download ? pk[h.reqIdx].s.http : h, path = safeDecode((req.uri || '').split('?')[0]);
+    const ct = (h.headers['content-type'] || '').toLowerCase();
+    if (download && !(/\.(ps1|psm1|sh|py|js|vbs|bat|cmd|pl|rb|php|aspx?|go|c|cs)$/i.test(path) || /(script|powershell|x-sh|x-python|javascript|text\/plain)/.test(ct))) continue;
+    const t = httpBodyText(cap, r.i, 65536);
+    const hits = aiTextSigns(t);
+    if (!hits.length || (!hits.some(x => x.strong) && hits.length < 2)) continue;
+    const who = download ? r.s.dst : r.s.src, peer = download ? r.s.src : r.s.dst;
+    aiTools.push({ who, peer, path, download, hits, ev: [h.reqIdx, r.i].filter(x => x !== undefined) });
+  }
+  for (const o of aiTools) add({ type: 'aitool', title: 'Tool written with AI: ' + o.path.split('/').pop(), sev: 'high', stage: 'resource', tech: 'T1588.007', techName: 'Obtain Capabilities: Artificial Intelligence', src: o.who, dst: o.peer, count: o.hits.length,
+    summary: o.who + (o.download ? ' downloaded ' : ' uploaded ') + o.path + (o.download ? ' from ' : ' to ') + o.peer + '. The file reads as if an AI assistant wrote it: ' + o.hits.map(x => x.name.toLowerCase()).join(', ') + '.',
+    details: o.hits.map(x => [x.name + (x.strong ? ' (strong)' : ''), x.line]), ev: o.ev });
+
   const reqs = new Map(); // src → [{i, t, dst, key, ua}]
   for (const r of pk) { const h = r.s.http; if (!h || h.resp) continue; let a = reqs.get(r.s.src); if (!a) { a = []; reqs.set(r.s.src, a); } a.push({ i: r.i, t: r.t, dst: r.s.dst, key: h.method + ' ' + (h.uri || ''), path: (h.uri || '').split('?')[0], ua: h.ua || '', h }); }
   // hosts that talk to AI model APIs (by TLS server name or DNS question)
@@ -678,6 +723,7 @@ function aiAssess(cap, D, add) {
   const involved = new Set(D.flatMap(d => [d.src, d.dst, ...(d.targets || [])]));
   const cands = new Set([...bySrc.keys()].filter(ip => !isPrivate(ip) || bySrc.get(ip).some(d => ['lateral', 'hscan', 'ldaprecon', 'kerberoast', 'imds', 'exfil'].includes(d.type))));
   for (const ip of llm.keys()) if (involved.has(ip)) cands.add(ip);
+  for (const o of aiTools) { if (involved.has(o.who) && cands.has(o.peer) === false && !isPrivate(o.peer)) cands.add(o.peer); }
   const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
   const cvOf = a => { const m = mean(a); return m ? Math.sqrt(mean(a.map(x => (x - m) ** 2))) / m : 1; };
   const trim = a => { const b = a.slice().sort((x, y) => x - y), k = Math.floor(b.length * 0.1); return b.slice(k, b.length - k); }; // ignore the odd pause
@@ -729,6 +775,9 @@ function aiAssess(cap, D, add) {
     // 7. talks to an AI model API itself
     const L = llm.get(src);
     if (L) sign('llm', 'Talks to an AI model API', 3, true, src + ' connected to ' + [...L.names].join(', ') + (isPrivate(src) ? ' while it was part of the attack: an agent may be running on it.' : '.'), L.ev);
+    // 8. the tools themselves were written by an AI
+    const T = aiTools.filter(o => o.who === src || o.peer === src);
+    if (T.length) sign('aicode', 'Tools or payloads written by AI', 2, true, T.map(o => o.path.split('/').pop() + ': ' + o.hits.map(x => x.name.toLowerCase()).join(', ')).join('; ') + '.', T.flatMap(o => o.ev));
     const score = signs.reduce((a, x) => a + x.weight, 0), strong = signs.filter(x => x.strong).length;
     if (!strong || score < 3) continue;
     const onHost = isPrivate(src) && !!L; // an agent running on one of our own machines

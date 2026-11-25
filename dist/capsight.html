@@ -834,6 +834,22 @@ a.btn { text-decoration: none; color: var(--text); }
 .aisigns p { margin: 4px 0 0 24px; font-size: 13.5px; color: var(--text-2); }
 .aino { margin: 8px 0 0; font-size: 12.5px; }
 @media (max-width: 640px) { .aibox { padding: 12px; } .aisigns p { margin-left: 0; } .ais-h { gap: 6px 10px; } .ais-h::before { display: none; } .ais-h b { flex: 1 1 100%; } .ais-h .btn { margin-left: auto; } }
+/* AI notice */
+.aialert { display: flex; align-items: flex-start; gap: 14px; padding: 16px 18px; margin-bottom: 16px; border-radius: var(--tile-r, 22px); background: var(--ink-bg); color: var(--ink-fg); }
+.aialert .aibadge { background: var(--crit); color: #fff; font-size: 13px; padding: 6px 8px; flex: none; margin-top: 2px; }
+.aia-t { flex: 1; min-width: 0; }
+.aialert h4 { margin: 0; font-size: 17px; font-weight: 700; }
+.aialert p { margin: 4px 0 0; font-size: 13.5px; opacity: .85; }
+.aia-signs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.aia-signs span { font-size: 12px; padding: 3px 8px; border-radius: 3px; border: 1px solid color-mix(in srgb, var(--ink-fg) 30%, transparent); }
+.aia-signs span.st { border-color: var(--crit); background: color-mix(in srgb, var(--crit) 25%, transparent); }
+.aia-more { font-size: 12.5px; }
+.aialert .btn.primary { background: var(--ink-fg); color: var(--ink-bg); border-color: var(--ink-fg); flex: none; align-self: center; }
+.aitab { margin-left: 4px; font: 700 10px/1 "IBM Plex Mono", monospace; padding: 3px 4px; border-radius: 3px; background: var(--ink-bg); color: var(--ink-fg); }
+.aipill b { font-family: "IBM Plex Mono", monospace; margin-right: 4px; }
+.aipill { background: var(--ink-bg) !important; color: var(--ink-fg) !important; }
+.pai { margin-left: 4px; font: 700 9.5px/1 "IBM Plex Mono", monospace; padding: 2px 3px; border-radius: 2px; background: var(--ink-bg); color: var(--ink-fg); vertical-align: 1px; }
+@media (max-width: 640px) { .aialert { flex-wrap: wrap; padding: 14px; gap: 10px; } .aialert .btn.primary { width: 100%; justify-content: center; } }
 </style>
 </head>
 <body>
@@ -845,7 +861,7 @@ a.btn { text-decoration: none; color: var(--text); }
   <nav class="tabs hidden" id="tabs">
     <span class="tabpill" id="tabpill" aria-hidden="true"></span>
     <button class="tab" data-view="overview">Overview</button>
-    <button class="tab" data-view="threats">Threats <span class="badge ok" id="tbadge">0</span></button>
+    <button class="tab" data-view="threats">Threats <span class="badge ok" id="tbadge">0</span><span class="aitab hidden" id="aitab" title="An AI-driven attack was detected">AI</span></button>
     <button class="tab" data-view="conversations">Network map</button>
     <button class="tab" data-view="packets">Packets</button>
     <button class="tab" data-view="artifacts">Artifacts <span class="badge ok" id="abadge">…</span></button>
@@ -2180,8 +2196,53 @@ function detectThreats(cap) {
 const LLM_API = /(^|\.)(api\.openai\.com|api\.anthropic\.com|generativelanguage\.googleapis\.com|aiplatform\.googleapis\.com|api\.x\.ai|api\.mistral\.ai|api\.groq\.com|openrouter\.ai|api\.deepseek\.com|api\.together\.xyz|api\.cohere\.(ai|com)|api\.perplexity\.ai|api\.fireworks\.ai|openai\.azure\.com|bedrock-runtime\.[\w-]+\.amazonaws\.com|api\.moonshot\.cn|dashscope\.aliyuncs\.com|ollama\.com)$/i;
 const AGENT_UA = /(python-httpx|python-requests|aiohttp|Go-http-client|node-fetch|axios|undici|okhttp|libwww-perl|httpie|langchain|llama[-_ ]?index|crewai|autogen|browser-use|openai|anthropic|HeadlessChrome|Playwright|puppeteer)/i;
 const API_MAP = /(swagger(\.json|\/v\d+\/swagger\.json|-ui)?|openapi\.(json|ya?ml)|api-docs|\.well-known\/(openid-configuration|ai-plugin\.json|mcp|security\.txt)|graphql|robots\.txt|sitemap\.xml|llms\.txt)(\?|$)/i;
+// Text an AI assistant leaves in code it writes: chat preambles, self-references, attributions,
+// markdown fences, emoji status lines, numbered "Step" comments, fill-in placeholders.
+const AI_TEXT = [
+  ['Chat-style preamble', /\b(Sure|Certainly|Absolutely|Of course)[!,.]?\s+(here('s| is| are)|below is)\b|\bHere('s| is) (a|an|the|your) [\w -]{0,40}(script|code|payload|function|tool|program)\b/i, true],
+  ['Mentions being an AI', /\bAs an AI\b|\bI('m| am) an AI\b|\blanguage model\b/i, true],
+  ['Credits an AI', /\b(generated|written|created|assisted|produced) (by|with|using) (ChatGPT|GPT-?[\d.o]*|Claude|Copilot|Gemini|Grok|Codex|Cursor|(an? )?(AI|LLM)( assistan(t|ce))?)\b/i, true],
+  ['Markdown code fence', /```[a-z]*\r?\n/i, false],
+  ['Emoji status lines', /[✅❌⚠\u{1F680}\u{1F512}\u{1F50D}\u{1F4E6}\u{1F389}\u{1F525}]/u, false],
+  ['Numbered "Step" comments', /^\s*(#|\/\/|--|REM|')\s*Step \d+\s*[:.)-]/im, false],
+  ['Fill-in placeholders', /\b(YOUR_[A-Z_]{3,}|your[-_](server|domain|ip|api[-_]key)[-_]here|<your[-_ ][\w -]{3,30}>|replace (this|with your))\b/i, false],
+];
+function aiTextSigns(t) {
+  try { t = new TextDecoder().decode(Uint8Array.from(t, c => c.charCodeAt(0) & 255)); } catch (e) {} // bytes → UTF-8, so emoji are seen
+  const hits = [];
+  const steps = (t.match(/^\s*(#|\/\/|--|REM|')\s*Step \d+\s*[:.)-]/gim) || []).length;
+  for (const [name, re, strong] of AI_TEXT) { if (name.startsWith('Numbered') && steps < 3) continue; const m = t.match(re); if (m) { const line = t.slice(Math.max(0, t.lastIndexOf('\n', m.index) + 1), t.indexOf('\n', m.index) < 0 ? t.length : t.indexOf('\n', m.index)).trim(); hits.push({ name, strong, line: line.length > 110 ? line.slice(0, 110) + '…' : line }); } }
+  return hits;
+}
+// the body of an HTTP message, across the packets that carry it
+function httpBodyText(cap, i, max) {
+  const r = cap.pk[i], s = r.s; if (s.st === undefined) return payloadText(cap, i, max);
+  const st = cap.streams[s.st]; let out = '', on = false;
+  for (const j of st.pk) { if (j === i) on = true; if (!on) continue; const q = cap.pk[j].s; if (j !== i && (q.http || q.dirA !== s.dirA)) { if (q.http) break; continue; } if (q.pll) out += payloadText(cap, j, max); if (out.length >= max) break; }
+  const k = out.indexOf('\r\n\r\n'); return k >= 0 && /^(HTTP\/|[A-Z]+ \S+ HTTP\/)/.test(out) ? out.slice(k + 4) : out;
+}
 function aiAssess(cap, D, add) {
   const pk = cap.pk;
+  // tools and payloads that read as if an AI wrote them (scripts downloaded, files uploaded)
+  const aiTools = [];
+  for (const r of pk) {
+    const h = r.s.http; if (!h) continue;
+    const upload = !h.resp && h.method === 'POST' && (h.body || '').length > 40;
+    const download = h.resp && h.status === 200 && h.reqIdx !== undefined;
+    if (!upload && !download) continue;
+    const req = download ? pk[h.reqIdx].s.http : h, path = safeDecode((req.uri || '').split('?')[0]);
+    const ct = (h.headers['content-type'] || '').toLowerCase();
+    if (download && !(/\.(ps1|psm1|sh|py|js|vbs|bat|cmd|pl|rb|php|aspx?|go|c|cs)$/i.test(path) || /(script|powershell|x-sh|x-python|javascript|text\/plain)/.test(ct))) continue;
+    const t = httpBodyText(cap, r.i, 65536);
+    const hits = aiTextSigns(t);
+    if (!hits.length || (!hits.some(x => x.strong) && hits.length < 2)) continue;
+    const who = download ? r.s.dst : r.s.src, peer = download ? r.s.src : r.s.dst;
+    aiTools.push({ who, peer, path, download, hits, ev: [h.reqIdx, r.i].filter(x => x !== undefined) });
+  }
+  for (const o of aiTools) add({ type: 'aitool', title: 'Tool written with AI: ' + o.path.split('/').pop(), sev: 'high', stage: 'resource', tech: 'T1588.007', techName: 'Obtain Capabilities: Artificial Intelligence', src: o.who, dst: o.peer, count: o.hits.length,
+    summary: o.who + (o.download ? ' downloaded ' : ' uploaded ') + o.path + (o.download ? ' from ' : ' to ') + o.peer + '. The file reads as if an AI assistant wrote it: ' + o.hits.map(x => x.name.toLowerCase()).join(', ') + '.',
+    details: o.hits.map(x => [x.name + (x.strong ? ' (strong)' : ''), x.line]), ev: o.ev });
+
   const reqs = new Map(); // src → [{i, t, dst, key, ua}]
   for (const r of pk) { const h = r.s.http; if (!h || h.resp) continue; let a = reqs.get(r.s.src); if (!a) { a = []; reqs.set(r.s.src, a); } a.push({ i: r.i, t: r.t, dst: r.s.dst, key: h.method + ' ' + (h.uri || ''), path: (h.uri || '').split('?')[0], ua: h.ua || '', h }); }
   // hosts that talk to AI model APIs (by TLS server name or DNS question)
@@ -2192,6 +2253,7 @@ function aiAssess(cap, D, add) {
   const involved = new Set(D.flatMap(d => [d.src, d.dst, ...(d.targets || [])]));
   const cands = new Set([...bySrc.keys()].filter(ip => !isPrivate(ip) || bySrc.get(ip).some(d => ['lateral', 'hscan', 'ldaprecon', 'kerberoast', 'imds', 'exfil'].includes(d.type))));
   for (const ip of llm.keys()) if (involved.has(ip)) cands.add(ip);
+  for (const o of aiTools) { if (involved.has(o.who) && cands.has(o.peer) === false && !isPrivate(o.peer)) cands.add(o.peer); }
   const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
   const cvOf = a => { const m = mean(a); return m ? Math.sqrt(mean(a.map(x => (x - m) ** 2))) / m : 1; };
   const trim = a => { const b = a.slice().sort((x, y) => x - y), k = Math.floor(b.length * 0.1); return b.slice(k, b.length - k); }; // ignore the odd pause
@@ -2243,6 +2305,9 @@ function aiAssess(cap, D, add) {
     // 7. talks to an AI model API itself
     const L = llm.get(src);
     if (L) sign('llm', 'Talks to an AI model API', 3, true, src + ' connected to ' + [...L.names].join(', ') + (isPrivate(src) ? ' while it was part of the attack: an agent may be running on it.' : '.'), L.ev);
+    // 8. the tools themselves were written by an AI
+    const T = aiTools.filter(o => o.who === src || o.peer === src);
+    if (T.length) sign('aicode', 'Tools or payloads written by AI', 2, true, T.map(o => o.path.split('/').pop() + ': ' + o.hits.map(x => x.name.toLowerCase()).join(', ')).join('; ') + '.', T.flatMap(o => o.ev));
     const score = signs.reduce((a, x) => a + x.weight, 0), strong = signs.filter(x => x.strong).length;
     if (!strong || score < 3) continue;
     const onHost = isPrivate(src) && !!L; // an agent running on one of our own machines
@@ -2786,6 +2851,11 @@ function setCapture(cap) {
   $('#filemeta').innerHTML = `<span class="fname" title="${esc(cap.name)}">${esc(cap.name)}</span><span class="pill">${fmtNum(cap.pk.length)} packets, ${fmtBytes(cap.size)}, ${fmtDur(cap.dur)}</span>`;
   const n = cap.threats.length, crit = cap.threats.filter(d => d.sev === 'critical').length;
   const b = $('#tbadge'); b.textContent = n; b.className = 'badge' + (n ? '' : ' ok'); b.style.background = n && !crit ? 'var(--high)' : '';
+  // AI-driven attacks are called out everywhere: a marker on the Threats tab, a notice, and a tag on every evidence packet
+  cap.aiD = cap.threats.filter(d => d.type === 'ai' || d.type === 'aitool').sort((x, y) => (y.type === 'ai') - (x.type === 'ai') || (y.ai?.sure ? 1 : 0) - (x.ai?.sure ? 1 : 0));
+  cap.aiEv = new Map(); cap.aiD.forEach(d => (d.signs || [{ name: d.title, ev: d.ev }]).forEach(g => g.ev.forEach(i => { if (!cap.aiEv.has(i)) cap.aiEv.set(i, g.name); })));
+  $('#aitab').classList.toggle('hidden', !cap.aiD.length);
+  if (cap.aiD.length) setTimeout(() => toast(aiHeadline(cap) + '. Open Threats for the evidence.'), 700);
   const h = location.hash.slice(1);
   S.view = VIEWS.includes(h) ? h : 'overview';
   // opening a capture from the start page adds a history entry, so Back (ours or the browser's) returns there
@@ -3099,7 +3169,7 @@ function renderOverview() {
   const internal = [...A.hosts.keys()].filter(h => isIp(h) && isPrivate(h)).length;
   const banner = D.length ? `<div class="tbanner" id="tban"><div class="ic">${SVGI(SEV_ICON.critical, 26)}</div><div><h4>${D.length} security detection${D.length > 1 ? 's' : ''}: ${['critical', 'high', 'medium', 'low'].map(s => [s, D.filter(d => d.sev === s).length]).filter(x => x[1]).map(x => x[1] + ' ' + x[0]).join(', ')}</h4><p>${esc(cap.flow ? cap.flow.story : '')}</p></div><div class="mini">${cap.flow.stages.map(s => `<i title="${esc(s.name)}${s.n ? ': ' + s.n : ': not seen'}" style="${s.n ? 'background:var(' + SEV_VAR[Object.keys(SEV_RANK).find(k => SEV_RANK[k] === s.sev)] + ')' : ''}"></i>`).join('')}<span class="btn sm">Open attack flow</span></div></div>`
     : `<div class="tbanner clean"><div class="ic">${SVGI(IC.check, 22)}</div><div><h4>No threats detected</h4><p>Checked for scans, brute force, web exploits, shells, beaconing, tunneling, exfiltration, spoofing and floods.</p></div></div>`;
-  el.innerHTML = `
+  el.innerHTML = `${aiAlertHtml(cap)}
   <div class="kpis">
     ${kpi(IC.pk, 'Packets', fmtNum(A.n), (A.n / dur).toFixed(A.n / dur < 10 ? 1 : 0) + ' packets/s avg')}
     ${kpi(IC.data, 'Data', bv + '<small>' + bu + '</small>', 'avg ' + Math.round(A.bytes / Math.max(A.n, 1)) + ' B per packet')}
@@ -3119,6 +3189,7 @@ function renderOverview() {
     <div class="card c4"><div class="card-h"><h3>TCP control flags</h3><span class="sub">packets</span></div><div class="card-b"><div class="bars" id="flagbars"></div></div></div>
   </div>`;
   if (D.length) $('#tban').onclick = () => go('threats');
+  wireAiAlert(el);
   $$('#tlseg button').forEach(b => { b.classList.toggle('on', b.dataset.m === S.tl); b.onclick = () => { S.tl = b.dataset.m; $$('#tlseg button').forEach(x => x.classList.toggle('on', x === b)); drawTimeline(); }; });
   $$('#pmseg button').forEach(b => { b.classList.toggle('on', b.dataset.m === S.pm); b.onclick = () => { S.pm = b.dataset.m; $$('#pmseg button').forEach(x => x.classList.toggle('on', x === b)); drawProtoBars(); }; });
   drawTimeline(); drawProtoBars(); drawTalkers(); drawPorts(); drawSizes(); drawFlags();
@@ -3330,7 +3401,7 @@ function renderThreats() {
   }
   const cnt = s => D.filter(d => d.sev === s).length;
   const story = esc(F.story).replace(/(\d{1,3}(?:\.\d{1,3}){3})/g, '<b class="mono" style="font-size:12.5px">$1</b>');
-  el.innerHTML = `
+  el.innerHTML = `${aiAlertHtml(cap)}
   <div class="thero">
     <div><div class="big">${D.length}</div><div class="lbl">detections</div></div>
     <div class="story"><h2>What happened</h2>${story}
@@ -3344,7 +3415,7 @@ function renderThreats() {
   $$('#view-threats [data-st]').forEach(x => x.onclick = () => { S.stage = S.stage === x.dataset.st ? null : x.dataset.st; renderThreats(); });
   $$('#view-threats [data-sev]').forEach(x => x.onclick = () => { S.sevF = S.sevF === x.dataset.sev ? null : x.dataset.sev; renderThreats(); });
   if ($('#clrf')) $('#clrf').onclick = () => { S.stage = null; S.sevF = null; renderThreats(); };
-  drawSequence();
+  wireAiAlert(el); drawSequence();
   drawDetections();
   if (S.tsel !== null) { const t = S.tsel; setTimeout(() => selectThreat(t, true), 60); }
 }
@@ -3402,6 +3473,25 @@ function drawSequence() {
   el.innerHTML = seqSvg(cap, { avail: el.clientWidth || 1100, sel: S.tsel, vis: d => (!S.stage || d.stage === S.stage) && (!S.sevF || d.sev === S.sevF) }).svg;
   $$('#seq .row').forEach(g => { g.onclick = () => selectThreat(+g.dataset.d, true); g.onmousemove = e => { const d = cap.threats[+g.dataset.d]; tip(`<div class="tt-h">${esc(d.title)}</div><div style="color:var(--text-2);max-width:320px">${esc(d.summary)}</div>`, e); }; g.onmouseleave = untip; });
 }
+// a plain-language headline for the AI verdict
+function aiHeadline(cap) {
+  const d = cap.aiD[0]; if (!d) return '';
+  if (d.type === 'aitool') return 'A tool written with AI was used in this capture';
+  if (d.title.startsWith('AI agent at work')) return 'An AI agent is at work on ' + d.src;
+  return (d.ai.sure ? 'AI-driven attack detected' : 'Possible AI-driven attack') + ' from ' + d.src;
+}
+// the notice at the top of Overview and Threats
+function aiAlertHtml(cap) {
+  if (!cap.aiD || !cap.aiD.length) return '';
+  const main = cap.aiD.find(d => d.type === 'ai') || cap.aiD[0];
+  const signs = main.signs ? main.signs : main.details.map(([k]) => ({ name: k.replace(/ \(strong\)$/, ''), strong: / \(strong\)$/.test(k) }));
+  const others = cap.aiD.filter(d => d !== main);
+  return `<div class="aialert" data-aid="${main.id}"><span class="aibadge">AI</span><div class="aia-t"><h4>${esc(aiHeadline(cap))}</h4>
+    <p>${main.type === 'ai' ? esc(main.src) + ' shows ' + signs.length + ' sign' + (signs.length > 1 ? 's' : '') + ' of an AI agent, ' + main.ai.strong + ' of them strong' + (main.ai.sure ? '. It moves at machine speed and retries, so act quickly.' : '. Check the evidence before you decide.') : esc(main.summary)}</p>
+    <div class="aia-signs">${signs.map(g => `<span class="${g.strong ? 'st' : ''}">${esc(g.name)}</span>`).join('')}</div>
+    ${others.length ? `<p class="aia-more">Also: ${others.map(d => esc(d.title)).join(' · ')}</p>` : ''}</div><button class="btn primary sm" data-aiopen="${main.id}">See the evidence</button></div>`;
+}
+function wireAiAlert(el) { $$('[data-aiopen]', el).forEach(b => b.onclick = e => { e.stopPropagation(); S.tsel = +b.dataset.aiopen; S.dirty.threats = 1; go('threats'); }); }
 // the evidence behind an AI verdict: one row per sign, each with the packets that show it
 function aiSignsHtml(d) {
   const a = d.ai;
@@ -3649,7 +3739,7 @@ function drawRows() {
     if (cc) { cls += ' cc'; style += `;--cc:${cc.color}`; }
     else if (P.color && !ig) { const cr = pkColorRule(r); if (cr) cls += ' ' + cr.cls; }
     const info = ig ? '<Ignored>' : s.info;
-    html += `<div class="${cls}" data-i="${i}" style="${style}"><div class="num dim">${i + 1}${P.comments.has(i) ? '<b class="pcm" title="Has a comment">•</b>' : ''}</div><div class="num">${pkTime(i, k ? pkAt(k - 1) : -1)}</div><div class="mono">${esc(s.src)}</div><div class="num pt">${portOf(s.sp)}</div><div class="mono">${esc(s.dst)}</div><div class="num pt">${portOf(s.dp)}</div><div>${protoPill(s.proto)}</div><div class="num">${r.len}</div><div title="${esc(info)}">${esc(info)}</div></div>`;
+    html += `<div class="${cls}" data-i="${i}" style="${style}"><div class="num dim">${i + 1}${P.comments.has(i) ? '<b class="pcm" title="Has a comment">•</b>' : ''}${cap.aiEv && cap.aiEv.has(i) ? '<b class="pai" title="AI evidence: ' + esc(cap.aiEv.get(i)) + '">AI</b>' : ''}</div><div class="num">${pkTime(i, k ? pkAt(k - 1) : -1)}</div><div class="mono">${esc(s.src)}</div><div class="num pt">${portOf(s.sp)}</div><div class="mono">${esc(s.dst)}</div><div class="num pt">${portOf(s.dp)}</div><div>${protoPill(s.proto)}</div><div class="num">${r.len}</div><div title="${esc(info)}">${esc(info)}</div></div>`;
   }
   const sp = $('#pspace'); sp.innerHTML = html;
   if (!n) sp.innerHTML = '<div class="empty">No packets match the current filter</div>';
@@ -3911,7 +4001,7 @@ function showDetail(i) {
   const T = new Tree(); dissect(bytes, r.lt, T);
   const det = cap.pkDet.get(i) !== undefined ? cap.threats[cap.pkDet.get(i)] : null;
   const st = s.st !== undefined ? cap.streams[s.st] : null;
-  const flags = [P.marked.has(i) ? '<span class="pill">Marked</span>' : '', P.ignored.has(i) ? '<span class="pill">Ignored</span>' : '', P.refs.has(i) ? '<span class="pill">Time reference</span>' : ''].join('');
+  const flags = [cap.aiEv && cap.aiEv.has(i) ? `<span class="pill aipill" title="This packet is evidence that an AI agent is involved"><b>AI</b> ${esc(cap.aiEv.get(i))}</span>` : '', P.marked.has(i) ? '<span class="pill">Marked</span>' : '', P.ignored.has(i) ? '<span class="pill">Ignored</span>' : '', P.refs.has(i) ? '<span class="pill">Time reference</span>' : ''].join('');
   $('#dhead').innerHTML = `<h3>Frame ${i + 1}</h3><span class="pill">${r.len} bytes on wire${r.cap !== r.len ? ', ' + r.cap + ' captured' : ''}</span><span class="pill">${new Date(r.t * 1000).toISOString().replace('T', ' ').replace('Z', '')} UTC</span>${flags}${det ? `<span class="sev ${det.sev}" style="cursor:pointer" id="dthreat">${SVGI(SEV_ICON[det.sev], 14)}${esc(det.title)}</span>` : ''}<span style="flex:1"></span>${st ? `<button class="btn sm" id="dfollow">${SVGI(IC.stream, 14)}Follow ${st.l4} stream</button><button class="btn sm ghost" id="dconv">${SVGI(IC.filter, 14)}Conversation</button>` : ''}<button class="btn sm ghost icon" id="dmore" title="More options for this packet" aria-label="More options">⋯</button>`;
   if (det) $('#dthreat').onclick = () => { S.tsel = det.id; S.dirty.threats = 1; go('threats'); };
   if (st) { $('#dfollow').onclick = () => followStream(st.id); $('#dconv').onclick = () => setExpr((st.l4 === 'UDP' ? 'udp' : 'tcp') + '.stream==' + st.id); }

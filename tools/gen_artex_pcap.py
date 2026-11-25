@@ -301,6 +301,22 @@ dns(t + 2.0, WEB, 'files-cdn-sync.net', [STAGE])
 t = http(t + 2.2, WEB, STAGE, http_req('GET', '/t/sharpagent.exe', 'files-cdn-sync.net', 'Microsoft-CryptoAPI/10.0'),
          http_resp(200, 'OK', fake_pe(b'ARTEX demo agent - harmless placeholder, not a program'), 'application/octet-stream', b'nginx'))[0]
 
+# An AI-written helper script, fetched from the staging server. A harmless stand-in: it only prints
+# messages, but it carries the marks an AI assistant leaves (chat preamble, credit line, emoji, steps).
+ps1 = """# Sure! Here's a PowerShell script that collects the domain details you asked for.
+# Generated with AI assistance (ARTEX demo, synthetic: this script performs no actions)
+# Step 1: Check the environment
+Write-Host "\u2705 [demo] environment check skipped"
+# Step 2: Enumerate the domain
+Write-Host "\u2705 [demo] domain enumeration skipped"
+# Step 3: Package the results
+Write-Host "\u2705 [demo] packaging skipped"
+# Step 4: Upload to YOUR_STAGING_SERVER (replace with your server)
+Write-Host "\U0001F680 [demo] upload skipped"
+""".encode('utf-8')
+t = http(t + 0.6, WEB, STAGE, http_req('GET', '/t/collect.ps1', 'files-cdn-sync.net', 'Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.20348.2849'),
+         http_resp(200, 'OK', ps1, 'text/plain; charset=utf-8', b'nginx'))[0]
+
 # T1087.002 / T1069: Active Directory recon over LDAP from the web server
 def ber(tag, body): 
     n = len(body)

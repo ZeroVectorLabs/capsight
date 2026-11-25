@@ -159,7 +159,7 @@ function drawRows() {
     if (cc) { cls += ' cc'; style += `;--cc:${cc.color}`; }
     else if (P.color && !ig) { const cr = pkColorRule(r); if (cr) cls += ' ' + cr.cls; }
     const info = ig ? '<Ignored>' : s.info;
-    html += `<div class="${cls}" data-i="${i}" style="${style}"><div class="num dim">${i + 1}${P.comments.has(i) ? '<b class="pcm" title="Has a comment">•</b>' : ''}</div><div class="num">${pkTime(i, k ? pkAt(k - 1) : -1)}</div><div class="mono">${esc(s.src)}</div><div class="num pt">${portOf(s.sp)}</div><div class="mono">${esc(s.dst)}</div><div class="num pt">${portOf(s.dp)}</div><div>${protoPill(s.proto)}</div><div class="num">${r.len}</div><div title="${esc(info)}">${esc(info)}</div></div>`;
+    html += `<div class="${cls}" data-i="${i}" style="${style}"><div class="num dim">${i + 1}${P.comments.has(i) ? '<b class="pcm" title="Has a comment">•</b>' : ''}${cap.aiEv && cap.aiEv.has(i) ? '<b class="pai" title="AI evidence: ' + esc(cap.aiEv.get(i)) + '">AI</b>' : ''}</div><div class="num">${pkTime(i, k ? pkAt(k - 1) : -1)}</div><div class="mono">${esc(s.src)}</div><div class="num pt">${portOf(s.sp)}</div><div class="mono">${esc(s.dst)}</div><div class="num pt">${portOf(s.dp)}</div><div>${protoPill(s.proto)}</div><div class="num">${r.len}</div><div title="${esc(info)}">${esc(info)}</div></div>`;
   }
   const sp = $('#pspace'); sp.innerHTML = html;
   if (!n) sp.innerHTML = '<div class="empty">No packets match the current filter</div>';
@@ -421,7 +421,7 @@ function showDetail(i) {
   const T = new Tree(); dissect(bytes, r.lt, T);
   const det = cap.pkDet.get(i) !== undefined ? cap.threats[cap.pkDet.get(i)] : null;
   const st = s.st !== undefined ? cap.streams[s.st] : null;
-  const flags = [P.marked.has(i) ? '<span class="pill">Marked</span>' : '', P.ignored.has(i) ? '<span class="pill">Ignored</span>' : '', P.refs.has(i) ? '<span class="pill">Time reference</span>' : ''].join('');
+  const flags = [cap.aiEv && cap.aiEv.has(i) ? `<span class="pill aipill" title="This packet is evidence that an AI agent is involved"><b>AI</b> ${esc(cap.aiEv.get(i))}</span>` : '', P.marked.has(i) ? '<span class="pill">Marked</span>' : '', P.ignored.has(i) ? '<span class="pill">Ignored</span>' : '', P.refs.has(i) ? '<span class="pill">Time reference</span>' : ''].join('');
   $('#dhead').innerHTML = `<h3>Frame ${i + 1}</h3><span class="pill">${r.len} bytes on wire${r.cap !== r.len ? ', ' + r.cap + ' captured' : ''}</span><span class="pill">${new Date(r.t * 1000).toISOString().replace('T', ' ').replace('Z', '')} UTC</span>${flags}${det ? `<span class="sev ${det.sev}" style="cursor:pointer" id="dthreat">${SVGI(SEV_ICON[det.sev], 14)}${esc(det.title)}</span>` : ''}<span style="flex:1"></span>${st ? `<button class="btn sm" id="dfollow">${SVGI(IC.stream, 14)}Follow ${st.l4} stream</button><button class="btn sm ghost" id="dconv">${SVGI(IC.filter, 14)}Conversation</button>` : ''}<button class="btn sm ghost icon" id="dmore" title="More options for this packet" aria-label="More options">⋯</button>`;
   if (det) $('#dthreat').onclick = () => { S.tsel = det.id; S.dirty.threats = 1; go('threats'); };
   if (st) { $('#dfollow').onclick = () => followStream(st.id); $('#dconv').onclick = () => setExpr((st.l4 === 'UDP' ? 'udp' : 'tcp') + '.stream==' + st.id); }

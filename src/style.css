@@ -805,3 +805,19 @@ a.btn { text-decoration: none; color: var(--text); }
 .aisigns p { margin: 4px 0 0 24px; font-size: 13.5px; color: var(--text-2); }
 .aino { margin: 8px 0 0; font-size: 12.5px; }
 @media (max-width: 640px) { .aibox { padding: 12px; } .aisigns p { margin-left: 0; } .ais-h { gap: 6px 10px; } .ais-h::before { display: none; } .ais-h b { flex: 1 1 100%; } .ais-h .btn { margin-left: auto; } }
+/* AI notice */
+.aialert { display: flex; align-items: flex-start; gap: 14px; padding: 16px 18px; margin-bottom: 16px; border-radius: var(--tile-r, 22px); background: var(--ink-bg); color: var(--ink-fg); }
+.aialert .aibadge { background: var(--crit); color: #fff; font-size: 13px; padding: 6px 8px; flex: none; margin-top: 2px; }
+.aia-t { flex: 1; min-width: 0; }
+.aialert h4 { margin: 0; font-size: 17px; font-weight: 700; }
+.aialert p { margin: 4px 0 0; font-size: 13.5px; opacity: .85; }
+.aia-signs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.aia-signs span { font-size: 12px; padding: 3px 8px; border-radius: 3px; border: 1px solid color-mix(in srgb, var(--ink-fg) 30%, transparent); }
+.aia-signs span.st { border-color: var(--crit); background: color-mix(in srgb, var(--crit) 25%, transparent); }
+.aia-more { font-size: 12.5px; }
+.aialert .btn.primary { background: var(--ink-fg); color: var(--ink-bg); border-color: var(--ink-fg); flex: none; align-self: center; }
+.aitab { margin-left: 4px; font: 700 10px/1 "IBM Plex Mono", monospace; padding: 3px 4px; border-radius: 3px; background: var(--ink-bg); color: var(--ink-fg); }
+.aipill b { font-family: "IBM Plex Mono", monospace; margin-right: 4px; }
+.aipill { background: var(--ink-bg) !important; color: var(--ink-fg) !important; }
+.pai { margin-left: 4px; font: 700 9.5px/1 "IBM Plex Mono", monospace; padding: 2px 3px; border-radius: 2px; background: var(--ink-bg); color: var(--ink-fg); vertical-align: 1px; }
+@media (max-width: 640px) { .aialert { flex-wrap: wrap; padding: 14px; gap: 10px; } .aialert .btn.primary { width: 100%; justify-content: center; } }

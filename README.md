@@ -241,6 +241,9 @@ Capsight checks every attacker for the signs that AI agent frameworks such as AR
 | Machine-speed, evenly timed requests | 20 or more requests in a burst with an even, sub-second gap | weak |
 | Scripted client used by agent frameworks | User-Agents such as `python-httpx`, `aiohttp`, `Go-http-client`, LangChain or Playwright | weak |
 | Kill chain at machine pace | From first contact to code execution in under three minutes | weak |
+| Tools or payloads written by AI | A downloaded script or uploaded file that reads like AI output: a chat preamble ("Sure! Here's a script…"), a line crediting an AI, markdown code fences, emoji status lines, numbered "Step" comments, fill-in placeholders such as `YOUR_SERVER` | strong |
+
+When Capsight finds an AI-driven attack it says so straight away: a notice at the top of Overview and Threats names the attacker and its signs with a **See the evidence** button, the Threats tab carries an **AI** marker, and every evidence packet is tagged **AI** in the packet list and details. A script that reads as AI-written also gets its own **Tool written with AI** detection, quoting the lines that gave it away.
 
 No single sign proves that an AI is driving, because fast scripts share some of them, so the verdict needs at least one strong sign. **AI-driven attack** (critical) needs a score of 5 and two strong signs; **Possibly AI-driven** (medium) needs a score of 3 and one. A host in the attack that keeps calling a model API gets **AI agent at work on compromised host**, and its steady calls are labelled as model API calls rather than C2. The attacker's role becomes **AI-driven attacker** in the attack flow, the network map and the report, which also lists AI-specific response steps. These are traffic heuristics, documented here so you can judge them.
 
