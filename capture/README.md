@@ -39,8 +39,14 @@ download and the steps to start it.
 
 ## Start it
 
-**Mac:** double-click `Capsight Capture.command` (the first time, right-click it and choose
-**Open**). It installs scapy once, asks for your Mac password, and opens the app in your browser.
+**Mac:** open **Terminal**, type `bash ` (with a space), drag `Capsight Capture.command` from the
+unzipped folder into the Terminal window and press Return. It installs scapy once, asks for your Mac
+password, and opens the app in your browser.
+
+If you double-click the file instead, macOS may say it "could not verify" the script, because it was
+downloaded and isn't signed by Apple. Starting it with `bash` as above avoids that. You can also allow
+it once: click **Done**, open **System Settings → Privacy & Security**, scroll down and click
+**Open Anyway** next to "Capsight Capture.command", then double-click it again.
 
 **Windows:** install [Npcap](https://npcap.com) first, then double-click `Capsight Capture.bat`
 and allow it to run as administrator.
