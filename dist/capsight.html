@@ -3478,6 +3478,28 @@ const RPT_FONT = '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial,
 const uniqList = a => [...new Set(a.filter(Boolean))];
 const listText = (a, max = 4) => a.length <= max ? a.join(', ') : a.slice(0, max).join(', ') + ' and ' + (a.length - max) + ' more';
 
+/* The network map, drawn off-screen with the app's own layout and exported as a light-theme SVG. */
+const RPT_VARS = { crit: '#d9485f', high: '#e07b4f', med: '#c9962a', low: '#8a8f9c', panel: '#ffffff', 'panel-2': '#f6f9fe', 'line-2': '#c5d3e6', text: '#0b1b33', 'text-2': '#3d4f6b', muted: '#5a6b85', accent: '#1f5fd6', axis: '#9fb0c8', dot: '#d6e0ee', s1: '#2563eb', s3: '#4f46e5', s7: '#6d74e8', teal: '#0ea5e9' };
+function reportMapSvg(cap) {
+  const host = document.createElement('div');
+  host.style.cssText = 'position:fixed;left:-30000px;top:0;width:1400px;height:1000px;visibility:hidden';
+  document.body.appendChild(host);
+  const prevA = S.A; let G = null;
+  try {
+    S.A = aggregate(cap, null);
+    G = makeGraph(host);
+    const svg = host.querySelector('svg'), vp = svg && svg.querySelector('#vp');
+    if (!vp) return null;
+    vp.removeAttribute('transform');
+    const bb = vp.getBBox(), pad = 12;
+    const x0 = Math.floor(bb.x - pad), y0 = Math.floor(bb.y - pad), W = Math.ceil(bb.width + pad * 2), H = Math.ceil(bb.height + pad * 2);
+    const defs = svg.querySelector('defs').cloneNode(true); defs.querySelectorAll('pattern').forEach(n => n.remove());
+    const fix = t => t.replace(/var\(--([\w-]+)\)/g, (_, k) => RPT_VARS[k] || '#5a6b85');
+    return { svg: fix(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="${x0} ${y0} ${W} ${H}" font-family="${RPT_FONT}"><rect x="${x0}" y="${y0}" width="${W}" height="${H}" fill="#ffffff"/>${defs.outerHTML}${vp.innerHTML}</svg>`), W, H };
+  } catch (e) { console.warn('report map', e); return null; }
+  finally { if (G) G.destroy(); S.A = prevA; host.remove(); }
+}
+
 async function reportModel(opts = {}) {
   const cap = S.cap;
   ensureArt(); if (cap.artP) await cap.artP;
@@ -3517,6 +3539,7 @@ async function reportModel(opts = {}) {
   if (files.length) actions.push('Look up the SHA-256 of the ' + files.length + ' suspicious file' + (files.length > 1 ? 's' : '') + ' below in your threat-intel tools and remove them from the hosts that received them.');
   let flow = null;
   if (F && D.length) { const r = seqSvg(cap, { col: k => RPT_COL[k] || RPT_COL.muted, avail: 1000, minLane: 98, compact: true, font: RPT_FONT, bg: '#ffffff' }); flow = r; }
+  const map = reportMapSvg(cap);
   const flaggedIps = A.iocs.ips.filter(o => o.bad || hostRole(o.v)).map(o => [o.v, 'IP address', hostRole(o.v) || 'Seen in a detection']);
   return {
     title: 'Findings report',
@@ -3526,7 +3549,7 @@ async function reportModel(opts = {}) {
     sev,
     verdict: D.length ? D.length + ' security detection' + (D.length > 1 ? 's' : '') + ': ' + sevLine : 'No attacks detected',
     summary: D.length ? (F && F.story) || '' : 'Capsight checked ' + fmtNum(cap.pk.length) + ' packets for port scans, host sweeps, brute force, web exploits, shells, beaconing, DNS tunnelling, exfiltration, ARP spoofing and floods, and found none. That does not prove the network is safe; it means nothing in this capture matched a known attack pattern.',
-    facts, actions, flow,
+    facts, actions, flow, map,
     hosts: fmtNum(ag.hosts.size),
     steps: (F ? F.steps : D.map(d => ({ d, src: d.src, dst: d.dst }))).map((s, i) => ({
       n: i + 1, sev: s.d.sev, title: s.d.title, tactic: stageName(s.d.stage), tech: s.d.tech || '',
@@ -3552,6 +3575,7 @@ function reportSections(m) {
   if (!m.clean) out.push({ h: 'What happened', p: [m.summary] });
   if (m.actions.length) out.push({ h: 'What to do now', list: m.actions });
   if (m.flow) out.push({ h: 'Attack flow', p: ['Who did what to whom, in time order. The numbers match the timeline below.'], img: 'flow' });
+  if (m.map) out.push({ h: 'Network map', p: [m.clean ? 'The hosts in this capture and who talked to whom. Thicker lines carried more traffic.' : 'The hosts in this capture and who talked to whom. Coloured arrows are attacks, labelled with their timeline numbers; thicker grey lines carried more traffic.'], img: 'map' });
   if (!m.clean) out.push({ h: 'Timeline', table: 'steps', rows: m.steps });
   if (m.iocs.length) out.push({ h: 'Indicators to block', table: 'iocs', rows: m.iocs });
   if (m.creds.length) out.push({ h: 'Passwords sent in clear text', p: [m.secrets ? 'Secrets are shown in full. Handle this report as sensitive.' : 'Secrets are masked. Capsight can include them in full when you make the report.'], table: 'creds', rows: m.creds });
@@ -3585,7 +3609,7 @@ async function reportMarkdown(m) {
     if (x.kv) s += x.kv.map(([k, v]) => '- **' + k + ':** ' + v).join('\n') + '\n\n';
     (x.p || []).forEach(p => s += p + '\n\n');
     if (x.list) s += x.list.map((t, i) => (i + 1) + '. ' + t).join('\n') + '\n\n';
-    if (x.img === 'flow') s += '![Attack flow](data:image/png;base64,' + b64(await svgToPng(m.flow.svg, m.flow.W, m.flow.H, 1.5)) + ')\n\n';
+    if (x.img) s += '![' + x.h + '](data:image/png;base64,' + b64(await svgToPng(m[x.img].svg, m[x.img].W, m[x.img].H, 1.5)) + ')\n\n';
     if (x.table === 'steps') s += tbl('steps', m.steps.map(st => { const c = stepCells(st); c[3] = '**' + c[3] + '**' + (st.summary ? '<br>' + st.summary : ''); return c; })) + '\n';
     else if (x.table) s += tbl(x.table, x.rows) + '\n';
   }
@@ -3604,11 +3628,11 @@ function reportHtml(m) {
   const sevChips = Object.entries(m.sev).filter(([, n]) => n).map(([k, n]) => `<span class="sev ${sevCls(k)}">${n} ${esc(SEV_LABEL[k])}</span>`).join('');
   const sec = x => {
     if (x.k === 'verdict') return `<div class="verdict ${m.clean ? 'ok' : 'bad'}"><div class="big">${m.clean ? 'No attacks detected' : m.steps.length + ' detection' + (m.steps.length > 1 ? 's' : '')}</div><div class="chips">${sevChips}</div></div>`;
-    return '<section' + (x.img ? ' class="flow"' : '') + '><h2>' + esc(x.h) + '</h2>'
+    return '<section' + (x.img ? ' class="figsec"' : '') + '><h2>' + esc(x.h) + '</h2>'
       + (x.kv ? '<dl class="facts">' + x.kv.map(([k, v]) => '<dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd>').join('') + '</dl>' : '')
       + (x.p || []).map(p => '<p>' + esc(p) + '</p>').join('')
       + (x.list ? '<ol class="todo">' + x.list.map(t => '<li>' + esc(t) + '</li>').join('') + '</ol>' : '')
-      + (x.img === 'flow' ? '<figure class="flow">' + m.flow.svg.replace('<svg ', '<svg role="img" aria-label="Attack flow diagram" preserveAspectRatio="xMinYMin meet" style="width:100%;height:auto" ') + '</figure>' : '')
+      + (x.img ? '<figure class="fig">' + m[x.img].svg.replace('<svg ', '<svg role="img" aria-label="' + esc(x.h) + ' diagram" preserveAspectRatio="xMinYMin meet" style="width:100%;height:auto" ') + '</figure>' : '')
       + (x.table === 'steps' ? steps : x.table ? tbl(x.table, x.rows) : '') + '</section>';
   };
   const logo = ($('#brand img') || {}).src || '';
@@ -3623,14 +3647,14 @@ header h1{margin:0;font-size:22px;letter-spacing:-.02em}header p{margin:2px 0 0;
 h2{font-size:16px;margin:26px 0 8px;letter-spacing:-.01em}p{margin:0 0 8px;max-width:80ch}
 dl.facts{display:grid;grid-template-columns:170px 1fr;gap:5px 14px;margin:0}dl.facts dt{color:#5a6b85}dl.facts dd{margin:0;font-weight:600;word-break:break-word}
 ol.todo{margin:0;padding-left:20px}ol.todo li{margin:0 0 6px;padding-left:4px}
-figure.flow{margin:6px 0 0;border:1px solid #dbe5f2;border-radius:12px;padding:8px;overflow:hidden}
+figure.fig{margin:6px 0 0;border:1px solid #dbe5f2;border-radius:12px;padding:8px;overflow:hidden}
 table{width:100%;border-collapse:collapse;font-size:12px;margin:4px 0 0}th,td{text-align:left;padding:6px 7px;border-bottom:1px solid #e3ebf5;vertical-align:top}
 thead th{color:#3d4f6b;font-weight:600;border-bottom:1.5px solid #c5d3e6;white-space:nowrap}.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;word-break:break-all}.nw{white-space:nowrap;word-break:normal}
 .t-steps .sum{color:#5a6b85;font-size:11.5px;margin-top:2px}.t-steps .when{white-space:nowrap;color:#5a6b85;font-variant-numeric:tabular-nums}.t-steps .att{font-size:11.5px;color:#3d4f6b}
 .dot{display:inline-flex;width:20px;height:20px;border-radius:50%;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:#fff}.dot.c{background:#d9485f}.dot.h{background:#e07b4f}.dot.m{background:#c9962a;color:#111}.dot.l{background:#8a8f9c}
 .sev{display:inline-block;padding:1px 8px;border-radius:999px;font-weight:600;font-size:11px;white-space:nowrap}.sev.c{background:#fdecef;color:#b42340}.sev.h{background:#fdf0e8;color:#a4481f}.sev.m{background:#fdf6e3;color:#8a6410}.sev.l{background:#eef1f6;color:#4a5568}
 footer{margin-top:30px;border-top:1px solid #dbe5f2;padding-top:12px;color:#5a6b85;font-size:11.5px}
-@media print{body{background:#fff}.page{padding:0;max-width:none}tr,li,figure{break-inside:avoid}h2{break-after:avoid}section.flow{break-before:page}}
+@media print{body{background:#fff}.page{padding:0;max-width:none}tr,li,figure{break-inside:avoid}h2{break-after:avoid}section.figsec{break-before:page}}
 </style></head><body><div class="page"><header>${logo ? `<img src="${logo}" alt="">` : ''}<div><h1>Capsight ${esc(m.title.toLowerCase())}</h1><p>${esc(m.file)}, generated ${esc(m.generated)}</p></div></header>
 ${reportSections(m).map(sec).join('')}
 <footer>${esc(RPT_FOOT)}</footer></div></body></html>`;
@@ -3647,20 +3671,22 @@ async function reportDocx(m) {
     + '<w:tr><w:trPr><w:tblHeader/></w:trPr>' + RPT_COLS[key].map((h, i) => cell(run(h, { b: true, sz: 17, color: '3D4F6B' }), widths && widths[i])).join('') + '</w:tr>'
     + rows.map(r => '<w:tr><w:trPr><w:cantSplit/></w:trPr>' + r.map((v, i) => cell(typeof v === 'object' ? v.runs : run(v, { sz: 17, mono: /SHA|Indicator/.test(RPT_COLS[key][i]) }), widths && widths[i])).join('') + '</w:tr>').join('')
     + '</w:tbl>' + para('');
-  let img = null;
-  if (m.flow) {
-    const maxW = 6.69 * 914400, w = maxW, h = Math.round(maxW * m.flow.H / m.flow.W);
-    img = { data: await svgToPng(m.flow.svg, m.flow.W, m.flow.H, 2), cx: Math.round(w), cy: h };
+  const imgs = {}; let pid = 0;
+  for (const k of ['flow', 'map']) {
+    if (!m[k]) continue;
+    const g = m[k], maxW = 6.69 * 914400, maxH = 8.6 * 914400;
+    let cx = maxW, cy = maxW * g.H / g.W; if (cy > maxH) { cx = cx * maxH / cy; cy = maxH; }
+    imgs[k] = { id: ++pid, rid: 'rIdImg' + pid, file: (k === 'flow' ? 'attack-flow' : 'network-map') + '.png', data: await svgToPng(g.svg, g.W, g.H, 2), cx: Math.round(cx), cy: Math.round(cy) };
   }
-  const drawing = () => '<w:p><w:pPr><w:spacing w:after="120"/></w:pPr><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="' + img.cx + '" cy="' + img.cy + '"/><wp:docPr id="1" name="Attack flow" descr="Attack flow diagram"/>'
-    + '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="1" name="attack-flow.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdFlow"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + img.cx + '" cy="' + img.cy + '"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>';
+  const drawing = (img, title) => '<w:p><w:pPr><w:spacing w:after="120"/></w:pPr><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="' + img.cx + '" cy="' + img.cy + '"/><wp:docPr id="' + img.id + '" name="' + x(title) + '" descr="' + x(title) + ' diagram"/>'
+    + '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="' + img.id + '" name="' + img.file + '"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="' + img.rid + '"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + img.cx + '" cy="' + img.cy + '"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>';
   const sec = s => {
     if (s.k === 'verdict') return para(m.verdict, null, { b: true, sz: 30, color: m.clean ? '17663E' : 'A3233A' }, '<w:spacing w:before="200" w:after="120"/>');
     let o = para(s.h, 'Heading1');
     if (s.kv) o += s.kv.map(([k, v]) => '<w:p><w:pPr><w:spacing w:after="40"/></w:pPr>' + run(k + ':  ', { color: '5A6B85' }) + run(v, { b: true }) + '</w:p>').join('');
-    (s.p || []).forEach(p => o += para(p));
+    (s.p || []).forEach(p => o += para(p, null, {}, s.img ? '<w:keepNext/>' : ''));
     if (s.list) o += s.list.map((t, i) => '<w:p><w:pPr><w:spacing w:after="60"/><w:ind w:left="360" w:hanging="360"/></w:pPr>' + run((i + 1) + '.\t', { b: true }) + run(t) + '</w:p>').join('');
-    if (s.img === 'flow' && img) o += drawing();
+    if (s.img && imgs[s.img]) o += drawing(imgs[s.img], s.h);
     if (s.table === 'steps') o += grid('steps', m.steps.map(st => { const c = stepCells(st); return [c[0], c[1], { runs: run(c[2], { b: true, sz: 17, color: sevColor[st.sev] }) }, { runs: run(c[3], { b: true, sz: 17 }) + (st.summary ? '<w:r><w:br/></w:r>' + run(st.summary, { sz: 16, color: '5A6B85' }) : '') }, { runs: run(c[4], { sz: 16, mono: true }) }, { runs: run(c[5], { sz: 16 }) }]; }), [4, 7, 9, 48, 18, 14]);
     else if (s.table) o += grid(s.table, s.rows);
     return o;
@@ -3680,11 +3706,11 @@ async function reportDocx(m) {
     + '</w:styles>';
   const ct = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>';
   const rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>';
-  const drels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' + (img ? '<Relationship Id="rIdFlow" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/attack-flow.png"/>' : '') + '</Relationships>';
+  const drels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' + Object.values(imgs).map(i => '<Relationship Id="' + i.rid + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + i.file + '"/>').join('') + '</Relationships>';
   const core = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>' + x('Capsight findings report: ' + m.file) + '</dc:title><dc:creator>Capsight</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">' + new Date().toISOString().replace(/\.\d+Z$/, 'Z') + '</dcterms:created></cp:coreProperties>';
   const enc = s => new TextEncoder().encode(s);
   const parts = [{ name: '[Content_Types].xml', data: enc(ct) }, { name: '_rels/.rels', data: enc(rels) }, { name: 'word/document.xml', data: enc(doc) }, { name: 'word/_rels/document.xml.rels', data: enc(drels) }, { name: 'word/styles.xml', data: enc(styles) }, { name: 'docProps/core.xml', data: enc(core) }];
-  if (img) parts.push({ name: 'word/media/attack-flow.png', data: img.data });
+  Object.values(imgs).forEach(i => parts.push({ name: 'word/media/' + i.file, data: i.data }));
   return makeZip(parts);
 }
 
@@ -3704,7 +3730,7 @@ function openReport() {
   const n = cap.threats.length;
   $('#mtitle').textContent = 'Download a findings report';
   $('#mbody').innerHTML = `<div class="rpt">
-    <p class="rpt-lead">${n ? `A short write-up of this capture: the verdict, what to do now, the attack flow diagram, a timeline of all ${n} detection${n > 1 ? 's' : ''} with MITRE ATT&amp;CK, and the indicators, passwords and files that matter.` : 'A short write-up of this capture: what was checked, plus any cleartext passwords and suspicious files. No attacks were detected.'}</p>
+    <p class="rpt-lead">${n ? `A short write-up of this capture: the verdict, what to do now, the attack flow and network map diagrams, a timeline of all ${n} detection${n > 1 ? 's' : ''} with MITRE ATT&amp;CK, and the indicators, passwords and files that matter.` : 'A short write-up of this capture: what was checked, plus any cleartext passwords and suspicious files. No attacks were detected.'}</p>
     <div class="rpt-grid">
       <button class="rpt-opt" data-fmt="pdf"><b>PDF</b><span>Ready to email or print. Opens your browser’s print window: choose Save as PDF.</span></button>
       <button class="rpt-opt" data-fmt="html"><b>Web page</b><span>One .html file that opens in any browser and prints cleanly.</span></button>
