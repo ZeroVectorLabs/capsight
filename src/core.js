@@ -182,6 +182,7 @@ function dissect(u8, lt, T) {
 
 function l3(u8, p, et, s, T) {
   const n = u8.length; let L;
+  s.l3o = p;
   if (et === 0x0800) {
     if (p + 20 > n) { s.proto = 'IPv4'; s.info = 'Truncated IPv4 header'; return; }
     const ihl = (u8[p] & 15) * 4, tot = be16(u8, p + 2), id = be16(u8, p + 4), ff = be16(u8, p + 6), ttl = u8[p + 8], pr = u8[p + 9];
@@ -253,6 +254,7 @@ function arp(u8, p, s, T) {
 }
 
 function l4(u8, p, end, pr, s, T) {
+  s.l4o = p;
   s.l4 = IP_PROTOS[pr] || ('IP proto ' + pr);
   if (pr === 6) return tcp(u8, p, end, s, T);
   if (pr === 17) return udp(u8, p, end, s, T);

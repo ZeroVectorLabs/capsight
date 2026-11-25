@@ -29,7 +29,7 @@
 <body>
 <header class="chrome">
 <div class="topbar">
-  <button class="btn ghost back hidden" id="backBtn" title="Back to the start page to open another capture (Alt+←)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span>Back</span></button>
+  <button class="btn ghost back hidden" id="backBtn" title="Back to the start page to open another capture (Alt+←)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span class="bl">Back</span></button>
   <div class="brand" id="brand"><img src="/*LOGO64*/" alt="" width="32" height="32">Capsight</div>
   <div class="filemeta hidden" id="filemeta"></div>
   <nav class="tabs hidden" id="tabs">
@@ -42,9 +42,9 @@
     <button class="tab" data-view="insights">DNS, TLS &amp; HTTP</button>
   </nav>
   <div class="actions">
-    <button class="btn hidden" id="reportBtn" title="Download a findings report as PDF, web page, Word or Markdown"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>Report</button>
-    <button class="btn" id="captureBtn" data-capture title="Record live traffic from a network port"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5" fill="#f2727f"/><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/></svg>Capture</button>
-    <button class="btn hidden" id="openBtn2">Open file</button>
+    <button class="btn hidden" id="reportBtn" aria-label="Report" title="Download a findings report as PDF, web page, Word or Markdown"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg><span class="bl">Report</span></button>
+    <button class="btn" id="captureBtn" data-capture aria-label="Capture" title="Record live traffic from a network port"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5" fill="#f2727f"/><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/></svg><span class="bl">Capture</span></button>
+    <button class="btn hidden" id="openBtn2" title="Open another capture file" aria-label="Open file"><svg class="ob" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="bl">Open file</span></button>
     <a class="btn ghost ghlink" href="https://github.com/ZeroVectorLabs/capsight" target="_blank" rel="noopener" title="Star or watch Capsight on GitHub to get new releases"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span>Star on GitHub</span></a>
     <button class="btn icon ghost" id="themeBtn" title="Switch light or dark"></button>
   </div>
@@ -52,11 +52,11 @@
 <div class="strip hidden" id="strip"><canvas id="stripcv"></canvas><div class="ends"><span id="strip0"></span><span class="hint" id="stripmid">Drag across the capture to focus on a time window</span><span id="strip1"></span></div></div>
 <div class="filterbar hidden" id="filterbar">
   <div class="fx" id="fx"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-    <input id="fin" spellcheck="false" autocomplete="off" placeholder="Filter packets, e.g.  ip:10.0.0.20  port:443  dns  !arp  len>1000  syn or rst"><kbd>/</kbd></div>
+    <input id="fin" spellcheck="false" autocomplete="off" placeholder="Apply a display filter, e.g.  ip.addr == 10.0.0.20 && tcp.port == 443"><kbd>/</kbd></div>
   <div class="chips" id="chips"></div>
   <span class="fcount" id="fcount"></span>
   <button class="btn sm hidden" id="clearAll" title="Remove every filter, chip and time window (Esc in the filter box clears the text)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>Clear filter</button>
-  <button class="btn sm ghost" id="helpBtn">Filter syntax</button>
+  <button class="btn sm ghost" id="helpBtn">Filter help</button>
 </div>
 </header>
 

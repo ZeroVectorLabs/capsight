@@ -48,6 +48,7 @@
   - [Capture live traffic](#capture-live-traffic)
 - [How to work with it](#how-to-work-with-it)
 - [Filter syntax](#filter-syntax)
+- [Packet list](#packet-list)
 - [Detections](#detections)
 - [Supported captures](#supported-captures)
 - [The sample capture](#the-sample-capture)
@@ -160,30 +161,57 @@ A typical investigation:
 4. **Look at the network map** to see which machines were involved and which internal hosts the attacker reached.
 5. **Collect artifacts.** Hash and save suspicious files, list the exposed credentials that need resetting, and copy the indicators into your blocklist or SIEM.
 6. **Write it up.** Click **Report** and send the PDF or Word file to your team, or paste the Markdown into a ticket.
-7. **Dig deeper with filters.** For example `ip:10.0.0.20 !tls`, `dns:exfil`, `status>=400`, or `threat` to see only evidence packets.
+7. **Dig deeper with filters.** Use Wireshark display filters such as `ip.addr == 10.0.0.20 && !tls` or `http.response.code >= 400`, right-click any packet to filter on it, or type `threat` to see only evidence packets.
 
-Keyboard: `/` focuses the filter, arrow keys and Page Up/Down move through the packet list, `Esc` closes dialogs.
+Keyboard: `/` focuses the filter, arrow keys, Page Up/Down, Home and End move through the packet list, `Esc` closes dialogs. More shortcuts are listed under [Packet list](#packet-list).
 
 ## Filter syntax
 
-Terms are combined with AND. Use `or` between groups and prefix a term with `!` to negate it. Operators: `:` `==` `!=` `>` `<` `>=` `<=`.
-
-**Clear filter**, next to the packet count, removes the filter text, every chip and the selected time window in one click.
+Capsight reads **Wireshark display filters**, so filters you already know work as they are. The filter bar turns green when a filter is valid and red when it is not; press Enter to apply it. **Filter help** next to the packet count lists examples you can click.
 
 | Filter | Matches |
 |---|---|
-| `tcp` `udp` `dns` `tls` `http` `arp` `smb` … | Protocol name |
-| `ip:10.0.0.5`, `ip:10.0.0.0/24`, `src:` `dst:` | Either address, a subnet, source or destination |
-| `port:443`, `dport<1024`, `sport:53` | Ports |
-| `len>1000`, `ttl<10`, `frame>=500`, `time>30` | Numeric comparisons |
-| `syn` `synack` `rst` `fin` | TCP flags |
-| `stream:12` | One TCP or UDP conversation |
-| `dns:example.com`, `sni:github`, `http:login`, `ua:sqlmap`, `status>=400` | Application fields (substring) |
-| `threat` | Packets that are evidence in a detection |
-| `mac:aa:bb:cc:dd:ee:ff`, `vlan:10` | Link layer |
-| anything else | Text search in addresses and the Info column |
+| `ip.addr == 10.0.0.20`, `ip.src == 10.0.0.0/24`, `ipv6.addr`, `eth.addr == aa:bb:cc:dd:ee:ff` | Addresses and subnets |
+| `tcp.port == 443`, `udp.dstport == 53`, `tcp.stream eq 12` | Ports and conversations |
+| `tcp.flags.syn == 1 && tcp.flags.ack == 0`, `tcp.flags.reset == 1` | TCP flags |
+| `http.request`, `http.request.method == "POST"`, `http.response.code >= 400`, `http.host contains "intranet"` | HTTP |
+| `dns.qry.name matches "exfil.*"`, `tls.handshake.extensions_server_name contains "github"` | DNS and TLS |
+| `frame contains "password"`, `tcp contains 47:45:54`, `tcp[13:1] == 02`, `ip[9:1] == 06` | Bytes: text or hex anywhere, or a slice counted from a protocol's start |
+| `frame.len > 1000`, `frame.number <= 100`, `frame.time_relative >= 30`, `ip.ttl < 10` | Numbers, with `== != > < >= <=` or `eq ne gt lt ge le` |
+| `frame.marked == 1`, `frame.ignored == 1`, `frame.comment`, `frame.coloring_rule.name == "TCP RST"` | Your marks, comments and colouring rules |
+| `(dns \|\| http) && !(ip.addr == 10.0.0.31)` | Combine with `&& \|\| !` or `and or not`, and brackets |
 
-Example: `ip:10.0.0.20 !tls port:80 or dns`
+Capsight's short forms still work too: `ip:10.0.0.5`, `port:443`, `dns:example`, `ua:sqlmap`, bare protocol names and flags (`syn`, `rst`), and `threat` for packets that are evidence in a detection.
+
+**Clear filter**, next to the packet count, removes the filter text, every chip and the selected time window in one click.
+
+## Packet list
+
+The Packets tab works the way Wireshark does.
+
+- **Right-click a packet** (long-press on a phone) for:
+  - **Apply as filter** and **Prepare as filter**: Selected, Not Selected, …and Selected, …or Selected, …and not Selected, …or not Selected. The filter is built from the column you clicked.
+  - **Conversation filter** (Ethernet, IPv4/IPv6, TCP, UDP) and **Colourise conversation** with ten colours.
+  - **Follow** the TCP, UDP, TLS or HTTP stream.
+  - **Mark**, **Ignore**, **Set time reference** and **Packet comment**.
+  - **Copy** the summary as text or CSV, a cell, the filter, or the bytes as a hex dump, a hex stream, printable text or an escaped string.
+  - **Export** the packet's bytes or the packet as `.pcapng`.
+- **Right-click a field** in the packet details to filter on it, copy it or export its bytes. Double-click a field to apply it as a filter.
+- **Columns** sort when you click their heading. The **Time** column shows seconds since start, since the previous packet, time of day, UTC or epoch, and counts from your time references.
+- **Colour rows** applies Wireshark's default colouring rules (TCP, UDP, HTTP, ARP, ICMP, SYN/FIN, RST and more).
+- **Go to** a packet number, **Find** a packet by text, hex bytes or display filter, and see counts of displayed, marked and ignored packets in the status bar.
+- **Export** the shown or marked packets as `.pcapng` (with your comments), or the packet list as CSV or text.
+- **Follow stream** shows the whole conversation or one direction, as ASCII, a hex dump or raw hex, and can filter the stream in or out or save it.
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+M` / `Ctrl+Shift+N` / `Ctrl+Shift+B` | Mark a packet / next marked / previous marked |
+| `Ctrl+D` | Ignore a packet |
+| `Ctrl+Alt+T` | Set a time reference |
+| `Ctrl+Alt+Shift+T` | Follow the TCP stream |
+| `Ctrl+G` / `Ctrl+F` | Go to a packet / find a packet |
+| `Ctrl+.` / `Ctrl+,` | Next / previous packet in the same conversation |
+| `Shift+F10` or the menu key | Open the packet menu from the keyboard |
 
 ## Detections
 

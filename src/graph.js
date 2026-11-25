@@ -88,7 +88,8 @@ function makeGraph(host) {
   const lanRank = n => n.icon === 'router' ? 0 : n.isServer ? 1 : n.role ? 2 : n.group ? 4 : 3;
   lan.sort((a, b) => lanRank(a) - lanRank(b) || b.bytes - a.bytes);
   const PX = 236, PY = 92, GX = PX - NW, GY = PY - NH;
-  const wcols = Math.max(1, Math.min(4, wan.length)), lcols = Math.max(1, Math.min(4, lan.length));
+  const MAXC = host.clientWidth && host.clientWidth < 640 ? 2 : 4; // phones get a narrower map that stays readable
+  const wcols = Math.max(1, Math.min(MAXC, wan.length)), lcols = Math.max(1, Math.min(MAXC, lan.length));
   const wrows = Math.ceil(wan.length / wcols), lrows = Math.ceil(lan.length / lcols);
   const crossN = edges.filter(e => e.a.zone !== e.b.zone).length;
   const BAND = Math.max(90, Math.min(200, 40 + crossN * 6));
@@ -216,7 +217,8 @@ function makeGraph(host) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     nodes.forEach(n => { x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y); x1 = Math.max(x1, n.x + n.w); y1 = Math.max(y1, n.y + n.h); });
     x0 -= 30; y0 -= 66; x1 += 30; y1 += 30;
-    G.k = Math.min(1.2, (r.width - 20) / (x1 - x0), (r.height - 60) / (y1 - y0));
+    if (MAXC === 2 && host.id === 'gmap') { G.k = Math.min(1.2, (r.width - 20) / (x1 - x0)); host.style.height = Math.round(Math.min(1100, (y1 - y0) * G.k + 40)) + 'px'; }
+    else G.k = Math.min(1.2, (r.width - 20) / (x1 - x0), (r.height - 60) / (y1 - y0));
     G.vx = (r.width - (x1 - x0) * G.k) / 2 - x0 * G.k; G.vy = 10 - y0 * G.k;
   };
   fit(); draw();
@@ -225,17 +227,23 @@ function makeGraph(host) {
   const toW = e => { const r = svg.getBoundingClientRect(); return { x: (e.clientX - r.left - G.vx) / G.k, y: (e.clientY - r.top - G.vy) / G.k }; };
   let drag = null, pan = null, moved = false, raf = 0;
   const redraw = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; draw(); }); };
-  svg.addEventListener('mousedown', e => {
+  // mouse, pen and touch all go through pointer events; two fingers pinch to zoom
+  const touches = new Map(); let pinch = null;
+  svg.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'touch') { touches.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (touches.size === 2) { const [a, b] = [...touches.values()]; drag = null; pan = null; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), k: G.k, vx: G.vx, vy: G.vy, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }; return; } }
     moved = false; const g = e.target.closest('.mnode');
     if (g) { const n = byId.get(g.dataset.n), p = toW(e); drag = { n, dx: p.x - n.x, dy: p.y - n.y }; }
     else if (!e.target.closest('.badge')) pan = { x: e.clientX, y: e.clientY, vx: G.vx, vy: G.vy };
     host.classList.add('drag'); e.preventDefault();
   });
-  window.addEventListener('mousemove', G._mm = e => {
+  window.addEventListener('pointermove', G._mm = e => {
+    if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && touches.size === 2) { const [a, b] = [...touches.values()], r = svg.getBoundingClientRect(); const k = Math.max(0.25, Math.min(3, pinch.k * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d)); const mx = pinch.mx - r.left, my = pinch.my - r.top; G.vx = mx - (mx - pinch.vx) * k / pinch.k + ((a.x + b.x) / 2 - pinch.mx); G.vy = my - (my - pinch.vy) * k / pinch.k + ((a.y + b.y) / 2 - pinch.my); G.k = k; moved = true; svg.querySelector('#vp').setAttribute('transform', `translate(${G.vx},${G.vy}) scale(${G.k})`); return; }
     if (drag) { const p = toW(e); drag.n.x = Math.round((p.x - drag.dx) / 6) * 6; drag.n.y = Math.round((p.y - drag.dy) / 6) * 6; moved = true; redraw(); return; }
     if (pan) { G.vx = pan.vx + e.clientX - pan.x; G.vy = pan.vy + e.clientY - pan.y; moved = true; svg.querySelector('#vp').setAttribute('transform', `translate(${G.vx},${G.vy}) scale(${G.k})`); }
   });
-  window.addEventListener('mouseup', G._mu = () => {
+  window.addEventListener('pointerup', G._mu = e => {
+    touches.delete(e.pointerId); if (pinch) { if (touches.size < 2) pinch = null; drag = null; pan = null; host.classList.remove('drag'); return; }
     if (drag && !moved) select(drag.n.id); else if (pan && !moved) select(null);
     drag = null; pan = null; host.classList.remove('drag');
   });
@@ -257,7 +265,8 @@ function makeGraph(host) {
   G.select = id => { if (id && !byId.has(id) && groupOf.has(id)) id = groupOf.get(id); select(id); };
   G.kick = () => { fit(); draw(); };
   G.relayout = () => { layout(); fit(); draw(); };
-  G.destroy = () => { window.removeEventListener('mousemove', G._mm); window.removeEventListener('mouseup', G._mu); };
+  G.destroy = () => { window.removeEventListener('pointermove', G._mm); window.removeEventListener('pointerup', G._mu); window.removeEventListener('pointercancel', G._mu); };
+  window.addEventListener('pointercancel', G._mu);
   return G;
 }
 function sideCluster(c) {
