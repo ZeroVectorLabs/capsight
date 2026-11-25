@@ -7,7 +7,7 @@ import asyncio, os, pathlib, sys
 from playwright.async_api import async_playwright
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-VIEWS = ['overview', 'threats', 'conversations', 'packets', 'artifacts', 'insights']
+VIEWS = ['overview', 'story', 'threats', 'conversations', 'packets', 'artifacts', 'insights']
 
 async def main():
     errors = []
