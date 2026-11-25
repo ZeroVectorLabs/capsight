@@ -380,13 +380,14 @@ function drawFlags() {
 function drawSizes() {
   const el = $('#sizes'), W = el.clientWidth || 400, H = 190, m = { l: 40, r: 6, t: 10, b: 26 };
   const labels = ['≤64', '65–128', '129–256', '257–512', '513–1K', '1K–1518', '>1518'];
+  const short = ['≤64', '≤128', '≤256', '≤512', '≤1K', '≤1518', '>1518']; // narrow screens: upper bound only
   const v = S.A.sizes, max = Math.max(1, ...v), iw = W - m.l - m.r, ih = H - m.t - m.b, bw = iw / v.length;
   const step = niceStep(max, 3), ticks = []; for (let t = 0; t <= max * 1.001; t += step) ticks.push(t);
   const ymax = Math.max(max, ticks[ticks.length - 1]);
   const y = x => m.t + ih - x / ymax * ih;
   let s = `<svg viewBox="0 0 ${W} ${H}" height="${H}">`;
   ticks.forEach(t => s += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${m.l - 8}" y="${y(t) + 4}" text-anchor="end">${t >= 1000 ? (t / 1000) + 'k' : t}</text>`);
-  v.forEach((c, i) => { const x = m.l + i * bw + 3, h = Math.max(c ? 2 : 0, ih - (y(c) - m.t)); s += `<path data-i="${i}" d="M${x},${m.t + ih} v${-Math.max(0, h - 4)} q0,-4 4,-4 h${bw - 14} q4,0 4,4 v${Math.max(0, h - 4)} z" fill="var(--s1)" class="szb"/><text x="${x + (bw - 6) / 2}" y="${H - 8}" text-anchor="middle">${labels[i]}</text>`; });
+  v.forEach((c, i) => { const x = m.l + i * bw + 3, h = Math.max(c ? 2 : 0, ih - (y(c) - m.t)); s += `<path data-i="${i}" d="M${x},${m.t + ih} v${-Math.max(0, h - 4)} q0,-4 4,-4 h${bw - 14} q4,0 4,4 v${Math.max(0, h - 4)} z" fill="var(--s1)" class="szb"/><text x="${x + (bw - 6) / 2}" y="${H - 8}" text-anchor="middle">${bw < 58 ? short[i] : labels[i]}</text>`; });
   s += `<line x1="${m.l}" x2="${W - m.r}" y1="${m.t + ih}" y2="${m.t + ih}" stroke="var(--axis)"/></svg>`;
   el.innerHTML = s;
   $$('.szb', el).forEach(p => { p.onmousemove = e => { const i = +p.dataset.i; tip(`<div class="tt-h">${labels[i]} bytes</div><div class="tt-r"><span>Packets</span><b>${fmtNum(v[i])}</b></div><div class="tt-r"><span>Share</span><b>${(v[i] / Math.max(S.A.n, 1) * 100).toFixed(1)}%</b></div>`, e); }; p.onmouseleave = untip; });
@@ -465,7 +466,8 @@ function drawTimeline() {
 }
 
 /* ===================== PACKETS ===================== */
-const RH = 28;
+let RH = 28;
+const PHONE = () => matchMedia('(max-width: 640px)').matches;
 function renderPackets() {
   const el = $('#view-packets');
   if (!$('#pbody', el)) {
@@ -486,14 +488,14 @@ function renderPackets() {
     });
     $('#copyhex').onclick = () => { if (S.sel < 0) return; const b = pkBytes(S.cap, S.sel); const h = [...b].map(h2).join(''); navigator.clipboard.writeText(h).then(() => toast('Copied ' + b.length + ' bytes as hex'), () => toast('Clipboard unavailable')); };
   }
-  const n = S.idx ? S.idx.length : S.cap.pk.length;
-  $('#pspace').style.height = (n * RH) + 'px';
   drawRows();
   if (S.sel >= 0) showDetail(S.sel); else { $('#dhead').innerHTML = '<h3>Packet details</h3>'; $('#tree').innerHTML = '<div class="empty">Select a packet to inspect its layers</div>'; $('#hex').innerHTML = ''; $('#hexsub').textContent = ''; }
 }
 function drawRows() {
   const pb = $('#pbody'); if (!pb) return;
   const cap = S.cap, list = S.idx, n = list ? list.length : cap.pk.length;
+  RH = PHONE() ? 52 : 28; // phones show each packet on two lines
+  $('#pspace').style.height = (n * RH) + 'px';
   const top = pb.scrollTop, h = pb.clientHeight;
   const a = Math.max(0, Math.floor(top / RH) - 8), b = Math.min(n, Math.ceil((top + h) / RH) + 8);
   let html = '';
@@ -527,14 +529,14 @@ function showDetail(i) {
     return `<div class="layer ${S.openLayers.has(key) ? 'open' : ''}" data-k="${esc(key)}" data-s="${L.s}" data-l="${L.l}"><div class="lh">${SVGI(IC.car, 14).replace('<svg', '<svg class="car"')}<span>${esc(L.name)}</span><span class="bl">${li ? L.l + ' B' : ''}</span></div><div class="fs">${L.f.map(f => `<div class="fld d${f.d}" data-s="${f.s}" data-l="${f.l}"><span class="k">${esc(f.n)}</span><span class="v">${esc(f.v)}</span></div>`).join('')}</div></div>`;
   }).join('');
   // hex
-  const lim = Math.min(bytes.length, 4096);
+  const lim = Math.min(bytes.length, 4096), per = PHONE() ? 8 : 16;
   let hx = '';
-  for (let o = 0; o < lim; o += 16) {
+  for (let o = 0; o < lim; o += per) {
     hx += `<span class="o">${o.toString(16).padStart(4, '0')}</span>`;
     let a = '';
-    for (let j = 0; j < 16; j++) {
+    for (let j = 0; j < per; j++) {
       const k = o + j;
-      if (j === 8) hx += '<span class="g"></span>';
+      if (j === per / 2) hx += '<span class="g"></span>';
       if (k < lim) { const b = bytes[k]; hx += `<span class="b${b ? '' : ' z'}" data-i="${k}">${h2(b)}</span>`; a += `<span class="a" data-i="${k}">${b >= 32 && b < 127 ? esc(String.fromCharCode(b)) : '·'}</span>`; }
       else hx += '<span class="b">  </span>';
     }
@@ -714,6 +716,12 @@ function seqSvg(cap, o = {}) {
 }
 function drawSequence() {
   const cap = S.cap, el = $('#seq');
+  if (PHONE()) { // the swim-lane diagram needs width; phones get the same steps as a list
+    const vis = d => (!S.stage || d.stage === S.stage) && (!S.sevF || d.sev === S.sevF);
+    el.innerHTML = `<ol class="seqlist">${cap.flow.steps.map((st, i) => [st.d, i + 1]).filter(([d]) => vis(d)).map(([d, n]) => `<li class="row${S.tsel === d.id ? ' sel' : ''}" data-d="${d.id}"><span class="n s-${d.sev}">${n}</span><div><b>${esc(d.title)}</b><span class="mono">${esc(d.src)} → ${esc(d.dst)}</span><span>+${fmtRel(d.t0 - cap.t0, cap.dur)} · ${esc(STAGES.find(x => x.k === d.stage).name)}</span></div></li>`).join('')}</ol>`;
+    $$('#seq .row').forEach(g => { g.onclick = () => selectThreat(+g.dataset.d, true); });
+    return;
+  }
   el.innerHTML = seqSvg(cap, { avail: el.clientWidth || 1100, sel: S.tsel, vis: d => (!S.stage || d.stage === S.stage) && (!S.sevF || d.sev === S.sevF) }).svg;
   $$('#seq .row').forEach(g => { g.onclick = () => selectThreat(+g.dataset.d, true); g.onmousemove = e => { const d = cap.threats[+g.dataset.d]; tip(`<div class="tt-h">${esc(d.title)}</div><div style="color:var(--text-2);max-width:320px">${esc(d.summary)}</div>`, e); }; g.onmouseleave = untip; });
 }

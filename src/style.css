@@ -608,12 +608,19 @@ a.btn { text-decoration: none; color: var(--text); }
   .lcta.left { margin-left: 0; }
   .lcta .pbtn.fill { width: 100%; margin-bottom: 6px; }
   .lcta .pbtn.line { min-height: 44px; }
-  .topbar { gap: 10px 14px; padding: 10px 16px 0; }
-  .actions { margin-left: auto; gap: 6px; }
+  /* app header: one row of icons, tabs below; it scrolls away so the content gets the screen */
+  .chrome { position: relative; }
+  .topbar { gap: 8px 10px; padding: 8px 12px 0; }
+  .brand { font-size: 17px; gap: 8px; } .brand img { width: 28px; height: 28px; }
+  .filemeta { display: none !important; }
+  .actions { margin-left: auto; gap: 4px; }
   .actions .btn { padding: 7px 11px; }
-  #backBtn:not(.hidden) ~ .actions { width: 100%; }
-  #backBtn:not(.hidden) ~ .actions .ghlink { display: none; }
-  #backBtn:not(.hidden) ~ .actions #themeBtn { margin-left: auto; }
+  #backBtn { margin-left: -6px; padding: 7px 4px; } #backBtn .bl { display: none; }
+  #backBtn:not(.hidden) ~ .actions .bl, #backBtn:not(.hidden) ~ .actions .ghlink { display: none; }
+  #backBtn:not(.hidden) ~ .actions .btn { width: 36px; height: 36px; padding: 0; justify-content: center; }
+  #backBtn:not(.hidden) ~ .actions #captureBtn svg { margin: 0; width: 16px; height: 16px; }
+  .tabs { height: 38px; margin: 2px 0 6px; }
+  .tab { padding: 0 12px; font-size: 13.5px; }
   .strip { padding: 0 16px 10px; }
   .strip .ends .hint { display: none; }
   .filterbar { padding-left: 16px; padding-right: 16px; }
@@ -639,6 +646,46 @@ a.btn { text-decoration: none; color: var(--text); }
   .artgrid { grid-template-columns: minmax(0, 1fr); }
   #flist .card { overflow-x: auto; }
   .toast { max-width: calc(100vw - 32px); }
+  /* packet list: two lines per packet (number, addresses, protocol / time, info, length) */
+  .pk-wrap { grid-template-rows: minmax(300px, 62vh) auto; }
+  .phead { display: none; }
+  .prow { height: 51px; padding: 6px 10px; grid-template-columns: 46px minmax(0, 1fr) minmax(0, 1fr) auto; grid-template-rows: auto auto; row-gap: 3px; align-content: center; border-bottom: 1px solid var(--line); }
+  .prow:nth-child(even) { background: transparent; }
+  .prow.sel { background: var(--accent-soft); }
+  .prow > div { padding: 0 4px; }
+  .prow > div:nth-child(1) { grid-area: 1 / 1; }
+  .prow > div:nth-child(2) { grid-area: 2 / 1; font-size: 11px; color: var(--muted); }
+  .prow > div:nth-child(3) { grid-area: 1 / 2; }
+  .prow > div:nth-child(4) { grid-area: 1 / 3; }
+  .prow > div:nth-child(4)::before { content: "→ "; color: var(--muted); font-family: inherit; }
+  .prow > div:nth-child(5) { grid-area: 1 / 4; justify-self: end; }
+  .prow > div:nth-child(6) { grid-area: 2 / 4; justify-self: end; font-size: 11.5px; color: var(--muted); }
+  .prow > div:nth-child(7) { grid-area: 2 / 2 / 3 / 4; font-size: 12px; color: var(--text-2); }
+  .hex { padding: 6px 12px 12px; font-size: 12px; }
+  .hex .o { margin-right: 10px; } .hex .asc { margin-left: 12px; }
+  .fld .k { min-width: 120px; } .fld.d1 .k { min-width: 100px; }
+  .tree { padding: 4px 2px 12px; }
+  .layer .fs { padding-left: 16px; }
+  .dhead { padding: 12px 12px 6px; }
+  /* detections: title on its own line, then severity and time */
+  .det .tline { gap: 6px 10px; }
+  .det .tline h4 { order: -1; flex: 1 1 100%; font-size: 16px; }
+  .det .stepn { font-size: 20px; }
+  .det .tag { font-size: 12px; }
+  /* landing: a readable crop of the app instead of a whole laptop shrunk to a thumbnail */
+  .mac { width: auto; margin: 40px 16px 0; }
+  .mac .screen { padding: 0; background: none; border: 1px solid var(--line-2); border-radius: 14px; overflow: hidden; aspect-ratio: 5 / 4; }
+  .mac .screen::before, .mac .base { display: none; }
+  .mac .screen img { width: 230%; max-width: none; border-radius: 0; }
+  .lnote { padding: 0 16px; }
+  .credit { flex-direction: column; gap: 10px; text-align: center; }
+  .help table, .help tbody, .help tr, .help td { display: block; }
+  .help tr { padding: 8px 0; border-top: 1px solid var(--line); }
+  .help table td { padding: 2px 0; }
+  .ftbl th:nth-child(n+5), .ftbl td:nth-child(n+5) { display: none; }
+  .gmap { touch-action: none; }
+  .glegend { position: static; margin: 4px 12px 14px; background: none; padding: 0; gap: 8px 14px; }
+  .glegend .hint { display: none; }
   .det { grid-template-columns: 30px minmax(0, 1fr); }
   .det h4 { min-width: 0; }
   .det dl { grid-template-columns: minmax(0, 1fr); }
@@ -648,3 +695,13 @@ a.btn { text-decoration: none; color: var(--text); }
   .subnav button { padding: 6px 10px 10px; font-size: 15px; }
   #dlEverything { order: 9; margin: 10px 0 10px !important; }
 }
+.seqlist { list-style: none; margin: 0; padding: 0 12px 6px; }
+.seqlist li { display: flex; gap: 12px; padding: 10px 4px; border-top: 1px solid var(--line); cursor: pointer; }
+.seqlist li:first-child { border-top: 0; }
+.seqlist li.sel { background: var(--accent-soft); }
+.seqlist .n { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff; background: var(--crit); }
+.seqlist .n.s-high { background: var(--high); } .seqlist .n.s-medium { background: var(--med); color: #111; } .seqlist .n.s-low { background: var(--low); }
+.seqlist div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.seqlist b { font-size: 14px; font-weight: 600; }
+.seqlist span { font-size: 12.5px; color: var(--text-2); overflow-wrap: anywhere; }
+.seqlist span.mono { font-size: 12px; color: var(--text); }
