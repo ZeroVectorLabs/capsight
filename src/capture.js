@@ -33,7 +33,7 @@ function renderCaptureDialog(running) {
     <ol class="cap-steps">
       <li><a class="pbtn fill sm" href="${CAP_ZIP}" download>Download Capsight Capture</a> <span class="cap-note">for Mac, Windows and Linux, ${'<a href="' + CAP_SRC + '" target="_blank" rel="noopener">source on GitHub</a>'}</span></li>
       <li>Unzip it and start it:<ul>
-        ${step('mac', '<b>Mac:</b> right-click <code>Capsight Capture.command</code>, choose <b>Open</b>, and enter your Mac password. It needs Python 3.')}
+        ${step('mac', '<b>Mac:</b> open <b>Terminal</b>, type <code>bash </code> (with a space), drag <code>Capsight Capture.command</code> from the unzipped folder into the Terminal window, press Return and enter your Mac password. Starting it this way avoids the “could not verify” warning macOS shows for downloaded scripts. It needs Python 3.')}
         ${step('win', '<b>Windows:</b> install <a href="https://npcap.com" target="_blank" rel="noopener">Npcap</a>, then double-click <code>Capsight Capture.bat</code> and allow it to run as administrator. It needs Python 3.')}
         ${step('linux', '<b>Linux:</b> <code>pip install scapy</code>, then <code>sudo python3 capsight_capture.py</code>.')}
       </ul></li>
