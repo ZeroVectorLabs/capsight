@@ -197,7 +197,7 @@ The Packets tab works the way Wireshark does.
   - **Copy** the summary as text or CSV, a cell, the filter, or the bytes as a hex dump, a hex stream, printable text or an escaped string.
   - **Export** the packet's bytes or the packet as `.pcapng`.
 - **Right-click a field** in the packet details to filter on it, copy it or export its bytes. Double-click a field to apply it as a filter.
-- **Columns** sort when you click their heading. The **Time** column shows seconds since start, since the previous packet, time of day, UTC or epoch, and counts from your time references.
+- **Columns:** No., Time, Source, **Src port**, Destination, **Dst port**, Protocol, Length and Info. Right-click a port to filter on it (`tcp.dstport == 80`); right-click a heading to hide or show the port columns. Columns sort when you click their heading. The **Time** column shows seconds since start, since the previous packet, time of day, UTC or epoch, and counts from your time references.
 - **Colour rows** applies Wireshark's default colouring rules (TCP, UDP, HTTP, ARP, ICMP, SYN/FIN, RST and more).
 - **Go to** a packet number, **Find** a packet by text, hex bytes or display filter, and see counts of displayed, marked and ignored packets in the status bar.
 - **Export** the shown or marked packets as `.pcapng` (with your comments), or the packet list as CSV or text.
@@ -213,13 +213,50 @@ The Packets tab works the way Wireshark does.
 | `Ctrl+.` / `Ctrl+,` | Next / previous packet in the same conversation |
 | `Shift+F10` or the menu key | Open the packet menu from the keyboard |
 
+### ARTEX-style AI attack sample
+
+[`samples/artex_ai_attack.pcap`](samples/artex_ai_attack.pcap) is a second synthetic capture, of the kind of AI-driven intrusion that public reporting on the ARTEX framework describes (November 2026). No public capture of a real ARTEX attack exists, so it is built from the reported behaviour, with invented addresses, names and tokens and no runnable code:
+
+- machine-speed recon that starts from the app's API map (`swagger.json`), then a port scan and endpoint fuzzing at a fixed 120 ms;
+- a web shell uploaded through an open file-upload endpoint and driven with `?cmd=`;
+- the same attack run replayed identically about 30 seconds later, and a "recheck loop" that polls the shell every 48 seconds;
+- cloud credentials taken from the Azure instance metadata service, then Azure management and storage access;
+- Active Directory recon over LDAP (with a cleartext bind), kerberoasting, an internal SMB/RDP/WinRM sweep, WinRM and SMB to the file server;
+- a tool download and a staged upload to an outside server.
+
+Open it with **Choose a capture file**. Regenerate it with `npm run sample:artex`.
+
 ## Detections
+
+### AI-driven attacks
+
+Capsight checks every attacker for the signs that AI agent frameworks such as ARTEX leave on the wire, and shows each sign with the packets behind it:
+
+| Sign | What Capsight looks for | Strength |
+|---|---|---|
+| Read the target's API map, then used it | `swagger.json`, `openapi.json`, `robots.txt`, `llms.txt` or similar fetched first, then the paths they list requested next | strong |
+| Replayed the same attack run | A run of 8 or more requests repeated step for step, in the same order, seconds or minutes later | strong |
+| Recheck loop at a fixed interval | The same URL polled at least 5 times, 10 s or more apart, with under 5% variation | strong |
+| Talks to an AI model API | A host in the attack connecting to OpenAI, Anthropic, Google, xAI, Mistral, Groq, OpenRouter, DeepSeek, Azure OpenAI, Bedrock and similar APIs | strong |
+| Machine-speed, evenly timed requests | 20 or more requests in a burst with an even, sub-second gap | weak |
+| Scripted client used by agent frameworks | User-Agents such as `python-httpx`, `aiohttp`, `Go-http-client`, LangChain or Playwright | weak |
+| Kill chain at machine pace | From first contact to code execution in under three minutes | weak |
+| Tools or payloads written by AI | A downloaded script or uploaded file that reads like AI output: a chat preamble ("Sure! Here's a script…"), a line crediting an AI, markdown code fences, emoji status lines, numbered "Step" comments, fill-in placeholders such as `YOUR_SERVER` | strong |
+
+When Capsight finds an AI-driven attack it says so straight away: a notice at the top of Overview and Threats names the attacker and its signs with a **See the evidence** button, the Threats tab carries an **AI** marker, and every evidence packet is tagged **AI** in the packet list and details. A script that reads as AI-written also gets its own **Tool written with AI** detection, quoting the lines that gave it away.
+
+No single sign proves that an AI is driving, because fast scripts share some of them, so the verdict needs at least one strong sign. **AI-driven attack** (critical) needs a score of 5 and two strong signs; **Possibly AI-driven** (medium) needs a score of 3 and one. A host in the attack that keeps calling a model API gets **AI agent at work on compromised host**, and its steady calls are labelled as model API calls rather than C2. The attacker's role becomes **AI-driven attacker** in the attack flow, the network map and the report, which also lists AI-specific response steps. These are traffic heuristics, documented here so you can judge them.
+
+### Everything else
+
 
 | Area | What is detected | ATT&amp;CK |
 |---|---|---|
 | Reconnaissance | SYN, NULL, FIN, Xmas and UDP port scans (with open ports found), horizontal scans, ping and ARP sweeps, attack-tool user agents, forced browsing | T1595, T1046, T1018 |
 | Initial access | SQL injection, XSS, path traversal, command injection, Log4Shell, Shellshock, Heartbleed, with signs of success read from the response | T1190 |
-| Credential access | SSH, FTP, RDP, SMB, database and web-login brute force; cleartext credentials; ARP spoofing; rogue DHCP | T1110, T1040, T1557 |
+| Web shells | A server-script file uploaded through the app and then driven with `?cmd=` requests, with the commands run | T1505.003 |
+| Credential access | SSH, FTP, RDP, SMB, database and web-login brute force; cleartext credentials (including LDAP simple binds); ARP spoofing; rogue DHCP; cloud tokens taken from the instance metadata service (Azure, AWS, Google Cloud); kerberoasting, with RC4 requests flagged | T1110, T1040, T1557, T1552.005, T1558.003 |
+| Discovery | Active Directory reconnaissance over LDAP (service accounts, admins, LAPS passwords, trusts) | T1087.002 |
 | Execution | Interactive and reverse shells over TCP, with the commands issued | T1059.004 |
 | Lateral movement | Internal hosts probing other internal hosts on SMB, RDP, SSH, WinRM or VNC | T1021 |
 | Command and control | Periodic beaconing, sessions on backdoor ports, tool and stager downloads, executables disguised as other file types, NXDOMAIN bursts (DGA), ICMP tunnels | T1071, T1571, T1105, T1036.008, T1568.002, T1095 |
@@ -263,6 +300,7 @@ npm test                # engine tests (parser, detections, artifacts)
 npm run build           # rebuild dist/capsight.html after editing src/
 npm run test:browser    # browser smoke test; needs `pip install playwright` and Chromium
 npm run sample          # regenerate samples/attack_scenario.pcap (needs scapy and Pillow)
+npm run sample:artex    # regenerate samples/artex_ai_attack.pcap (needs scapy)
 ```
 
 Edit files in `src/`, run `npm run build`, and commit the rebuilt `dist/capsight.html` together with your source changes. Every push to `main` that changes `dist/` redeploys the live site through `.github/workflows/pages.yml`. CI runs the tests and `python3 tools/build.py --check`, which fails if the committed bundle is stale.
@@ -286,6 +324,7 @@ capture/          Capsight Capture, the helper that records traffic to .pcap (Py
 assets/           logo, link-preview card and start-page app images
 fonts/            DM Sans and IBM Plex Mono (SIL Open Font License), embedded at build time
 samples/          attack_scenario.pcap
+                  artex_ai_attack.pcap  an ARTEX-style AI-driven intrusion, built from public reporting
 tools/
   build.py          bundles everything into dist/capsight.html
   gen_attack_pcap.py  generates the sample capture

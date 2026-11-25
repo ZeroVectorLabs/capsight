@@ -4,8 +4,9 @@
 // sortable columns, colouring rules, time formats, go to packet, find, and export.
 let RH = 28;
 const PHONE = () => matchMedia('(max-width: 640px)').matches;
-const PK_COLS = ['no', 'time', 'src', 'dst', 'proto', 'len', 'info'];
-const PK_COL_NAME = { no: 'No.', time: 'Time', src: 'Source', dst: 'Destination', proto: 'Protocol', len: 'Length', info: 'Info' };
+const PK_COLS = ['no', 'time', 'src', 'sport', 'dst', 'dport', 'proto', 'len', 'info'];
+const PK_COL_NAME = { no: 'No.', time: 'Time', src: 'Source', sport: 'Src port', dst: 'Destination', dport: 'Dst port', proto: 'Protocol', len: 'Length', info: 'Info' };
+const portOf = p => p >= 0 ? String(p) : '';
 const PI = {
   up: '<path d="M18 15l-6-6-6 6"/>', down: '<path d="M6 9l6 6 6-6"/>',
   first: '<path d="M17 18l-6-6 6-6M7 6v12"/>', last: '<path d="M7 6l6 6-6 6M17 6v12"/>',
@@ -16,7 +17,7 @@ const PI = {
 function pkPref(k, d) { try { const v = localStorage.getItem('capsight.pk.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
 const pkSetPref = (k, v) => { try { localStorage.setItem('capsight.pk.' + k, JSON.stringify(v)); } catch (e) {} };
 function pkState(prev) {
-  return { marked: new Set(), ignored: new Set(), refs: new Set(), refList: [], comments: new Map(), conv: [], color: prev ? prev.color : pkPref('color', true), tfmt: prev ? prev.tfmt : pkPref('tfmt', 'rel'), sort: null, sorted: null, sortedFor: undefined, sortKey: '', find: { mode: 'string', q: '' }, layers: null };
+  return { marked: new Set(), ignored: new Set(), refs: new Set(), refList: [], comments: new Map(), conv: [], color: prev ? prev.color : pkPref('color', true), ports: prev ? prev.ports : pkPref('ports', true), tfmt: prev ? prev.tfmt : pkPref('tfmt', 'rel'), sort: null, sorted: null, sortedFor: undefined, sortKey: '', find: { mode: 'string', q: '' }, layers: null };
 }
 
 /* ---------- colouring rules (Wireshark's defaults, first match wins) ---------- */
@@ -61,7 +62,7 @@ function pkList() {
   const key = P.sort.c + P.sort.dir;
   if (P.sortedFor === base && P.sortKey === key && P.sorted) return P.sorted;
   const cap = S.cap, arr = base ? base.slice() : Array.from(cap.pk, (_, i) => i);
-  const get = { no: i => i, time: i => i, src: i => addrKey(cap.pk[i].s.src), dst: i => addrKey(cap.pk[i].s.dst), proto: i => cap.pk[i].s.proto, len: i => cap.pk[i].len, info: i => cap.pk[i].s.info }[P.sort.c];
+  const get = { no: i => i, time: i => i, src: i => addrKey(cap.pk[i].s.src), dst: i => addrKey(cap.pk[i].s.dst), sport: i => cap.pk[i].s.sp, dport: i => cap.pk[i].s.dp, proto: i => cap.pk[i].s.proto, len: i => cap.pk[i].len, info: i => cap.pk[i].s.info }[P.sort.c];
   const k = new Map(arr.map(i => [i, get(i)]));
   arr.sort((a, b) => { const x = k.get(a), y = k.get(b); return (x < y ? -1 : x > y ? 1 : a - b) * P.sort.dir; });
   P.sorted = arr; P.sortedFor = base; P.sortKey = key;
@@ -102,6 +103,7 @@ function renderPackets() {
   $('#ptfmt').value = S.pk.tfmt; $('#pcolor').checked = S.pk.color;
   $('#ptable').style.setProperty('--tw', TFMT_W[S.pk.tfmt] + 'px');
   $('#ptable').classList.toggle('pkcolor', S.pk.color);
+  $('#ptable').classList.toggle('noports', !S.pk.ports);
   drawRows();
   if (S.sel >= 0) showDetail(S.sel); else { $('#dhead').innerHTML = '<h3>Packet details</h3>'; $('#tree').innerHTML = '<div class="empty">Select a packet to inspect its layers. Right-click it for filters and more.</div>'; $('#hex').innerHTML = ''; $('#hexsub').textContent = ''; }
 }
@@ -121,7 +123,7 @@ function pkWire() {
   ['pointerup', 'pointercancel'].forEach(t => pb.addEventListener(t, () => clearTimeout(pkLong.t)));
   pb.addEventListener('keydown', pkKeys);
   $('#phead').onclick = e => { const h = e.target.closest('[data-c]'); if (!h) return; const c = h.dataset.c, P = S.pk; P.sort = !P.sort || P.sort.c !== c ? { c, dir: 1 } : P.sort.dir === 1 ? { c, dir: -1 } : null; drawRows(); if (S.sel >= 0) selectPacket(S.sel, true); };
-  $('#phead').oncontextmenu = e => { e.preventDefault(); const h = e.target.closest('[data-c]'); const c = h ? h.dataset.c : null; ctxMenu([{ t: 'Sort ascending', dis: !c, act: () => { S.pk.sort = { c, dir: 1 }; drawRows(); } }, { t: 'Sort descending', dis: !c, act: () => { S.pk.sort = { c, dir: -1 }; drawRows(); } }, { t: 'Remove sorting', dis: !S.pk.sort, act: () => { S.pk.sort = null; drawRows(); } }], e.clientX, e.clientY); };
+  $('#phead').oncontextmenu = e => { e.preventDefault(); const h = e.target.closest('[data-c]'); const c = h ? h.dataset.c : null; ctxMenu([{ t: 'Sort ascending', dis: !c, act: () => { S.pk.sort = { c, dir: 1 }; drawRows(); } }, { t: 'Sort descending', dis: !c, act: () => { S.pk.sort = { c, dir: -1 }; drawRows(); } }, { t: 'Remove sorting', dis: !S.pk.sort, act: () => { S.pk.sort = null; drawRows(); } }, { sep: 1 }, { t: S.pk.ports ? 'Hide port columns' : 'Show port columns', act: () => { S.pk.ports = !S.pk.ports; pkSetPref('ports', S.pk.ports); $('#ptable').classList.toggle('noports', !S.pk.ports); } }], e.clientX, e.clientY); };
   $$('[data-nav]').forEach(b => b.onclick = () => pkNav(b.dataset.nav));
   $('#pgo').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); pkGoTo(e.target.value); } if (e.key === 'Escape') e.target.blur(); });
   $('#ptfmt').onchange = e => { S.pk.tfmt = e.target.value; pkSetPref('tfmt', S.pk.tfmt); $('#ptable').style.setProperty('--tw', TFMT_W[S.pk.tfmt] + 'px'); drawRows(); };
@@ -157,7 +159,7 @@ function drawRows() {
     if (cc) { cls += ' cc'; style += `;--cc:${cc.color}`; }
     else if (P.color && !ig) { const cr = pkColorRule(r); if (cr) cls += ' ' + cr.cls; }
     const info = ig ? '<Ignored>' : s.info;
-    html += `<div class="${cls}" data-i="${i}" style="${style}"><div class="num dim">${i + 1}${P.comments.has(i) ? '<b class="pcm" title="Has a comment">•</b>' : ''}</div><div class="num">${pkTime(i, k ? pkAt(k - 1) : -1)}</div><div class="mono">${esc(s.src)}</div><div class="mono">${esc(s.dst)}</div><div>${protoPill(s.proto)}</div><div class="num">${r.len}</div><div title="${esc(info)}">${esc(info)}</div></div>`;
+    html += `<div class="${cls}" data-i="${i}" style="${style}"><div class="num dim">${i + 1}${P.comments.has(i) ? '<b class="pcm" title="Has a comment">•</b>' : ''}${cap.aiEv && cap.aiEv.has(i) ? '<b class="pai" title="AI evidence: ' + esc(cap.aiEv.get(i)) + '">AI</b>' : ''}</div><div class="num">${pkTime(i, k ? pkAt(k - 1) : -1)}</div><div class="mono">${esc(s.src)}</div><div class="num pt">${portOf(s.sp)}</div><div class="mono">${esc(s.dst)}</div><div class="num pt">${portOf(s.dp)}</div><div>${protoPill(s.proto)}</div><div class="num">${r.len}</div><div title="${esc(info)}">${esc(info)}</div></div>`;
   }
   const sp = $('#pspace'); sp.innerHTML = html;
   if (!n) sp.innerHTML = '<div class="empty">No packets match the current filter</div>';
@@ -260,6 +262,7 @@ function colFilter(i, c) {
     case 'no': return 'frame.number==' + (i + 1);
     case 'time': return 'frame.time_relative==' + (r.t - cap.t0).toFixed(6);
     case 'dst': return addrFilter(s, 'dst');
+    case 'sport': case 'dport': { const v = c === 'sport' ? s.sp : s.dp; if (v < 0) return addrFilter(s, c === 'sport' ? 'src' : 'dst'); const l4 = s.l4 === 'UDP' ? 'udp' : s.l4 === 'TCP' ? 'tcp' : ''; return l4 ? l4 + '.' + (c === 'sport' ? 'srcport' : 'dstport') + '==' + v : (c === 'sport' ? 'sport' : 'dport') + '==' + v; }
     case 'proto': return /^[a-z][a-z0-9]*$/i.test(s.proto) ? s.proto.toLowerCase() : '_ws.col.protocol==' + fq(s.proto);
     case 'len': return 'frame.len==' + r.len;
     case 'info': return '_ws.col.info==' + fq(s.info);
@@ -301,7 +304,7 @@ function pkMenu(i, c, x, y) {
   const det = cap.pkDet.get(i) !== undefined ? cap.threats[cap.pkDet.get(i)] : null;
   const convs = convFilters(i);
   const swatches = f => ({ sw: CONV_COLORS, act: col => { P.conv = P.conv.filter(cv => cv.expr !== f); P.conv.unshift({ expr: f, pred: compileFilter(f), color: col }); drawRows(); toast('Colourised this conversation'); } });
-  const cell = { no: String(i + 1), time: pkTime(i), src: s.src, dst: s.dst, proto: s.proto, len: String(r.len), info: s.info }[c];
+  const cell = { no: String(i + 1), time: pkTime(i), src: s.src, sport: portOf(s.sp), dst: s.dst, dport: portOf(s.dp), proto: s.proto, len: String(r.len), info: s.info }[c];
   ctxMenu([
     { t: P.marked.has(i) ? 'Unmark packet' : 'Mark packet', k: 'Ctrl+M', act: () => pkToggle('marked', i) },
     { t: P.ignored.has(i) ? 'Unignore packet' : 'Ignore packet', k: 'Ctrl+D', act: () => pkToggle('ignored', i) },
@@ -346,7 +349,7 @@ function pkCopy(text, msg) {
   if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, fail); else fail();
 }
 function pkSummary(list, fmt) {
-  const cap = S.cap, rows = list.map((i, k) => { const r = cap.pk[i], s = r.s; return [i + 1, pkTime(i, k ? list[k - 1] : -1), s.src, s.dst, s.proto, r.len, S.pk.ignored.has(i) ? '<Ignored>' : s.info]; });
+  const cap = S.cap, rows = list.map((i, k) => { const r = cap.pk[i], s = r.s; return [i + 1, pkTime(i, k ? list[k - 1] : -1), s.src, portOf(s.sp), s.dst, portOf(s.dp), s.proto, r.len, S.pk.ignored.has(i) ? '<Ignored>' : s.info]; });
   const head = PK_COLS.map(c => PK_COL_NAME[c]);
   if (fmt === 'csv') return [head].concat(rows).map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
   return rows.map(r => r.join('\t')).join('\n');
@@ -418,7 +421,7 @@ function showDetail(i) {
   const T = new Tree(); dissect(bytes, r.lt, T);
   const det = cap.pkDet.get(i) !== undefined ? cap.threats[cap.pkDet.get(i)] : null;
   const st = s.st !== undefined ? cap.streams[s.st] : null;
-  const flags = [P.marked.has(i) ? '<span class="pill">Marked</span>' : '', P.ignored.has(i) ? '<span class="pill">Ignored</span>' : '', P.refs.has(i) ? '<span class="pill">Time reference</span>' : ''].join('');
+  const flags = [cap.aiEv && cap.aiEv.has(i) ? `<span class="pill aipill" title="This packet is evidence that an AI agent is involved"><b>AI</b> ${esc(cap.aiEv.get(i))}</span>` : '', P.marked.has(i) ? '<span class="pill">Marked</span>' : '', P.ignored.has(i) ? '<span class="pill">Ignored</span>' : '', P.refs.has(i) ? '<span class="pill">Time reference</span>' : ''].join('');
   $('#dhead').innerHTML = `<h3>Frame ${i + 1}</h3><span class="pill">${r.len} bytes on wire${r.cap !== r.len ? ', ' + r.cap + ' captured' : ''}</span><span class="pill">${new Date(r.t * 1000).toISOString().replace('T', ' ').replace('Z', '')} UTC</span>${flags}${det ? `<span class="sev ${det.sev}" style="cursor:pointer" id="dthreat">${SVGI(SEV_ICON[det.sev], 14)}${esc(det.title)}</span>` : ''}<span style="flex:1"></span>${st ? `<button class="btn sm" id="dfollow">${SVGI(IC.stream, 14)}Follow ${st.l4} stream</button><button class="btn sm ghost" id="dconv">${SVGI(IC.filter, 14)}Conversation</button>` : ''}<button class="btn sm ghost icon" id="dmore" title="More options for this packet" aria-label="More options">⋯</button>`;
   if (det) $('#dthreat').onclick = () => { S.tsel = det.id; S.dirty.threats = 1; go('threats'); };
   if (st) { $('#dfollow').onclick = () => followStream(st.id); $('#dconv').onclick = () => setExpr((st.l4 === 'UDP' ? 'udp' : 'tcp') + '.stream==' + st.id); }

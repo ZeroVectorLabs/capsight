@@ -35,7 +35,7 @@ const SEV_ICON = {
 const SEV_LABEL = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' };
 const SEV_VAR = { critical: '--crit', high: '--high', medium: '--med', low: '--low' };
 const sevBadge = (sev, n) => `<span class="sev ${sev}">${SVGI(SEV_ICON[sev], 14)}${SEV_LABEL[sev]}${n !== undefined ? ' <span class="n">' + n + '</span>' : ''}</span>`;
-const ROLE_CLS = { 'At-risk host': 'r-compromised', 'Malware host': 'r-c2', 'Attacker': 'r-attacker', 'Botnet / spoofed': 'r-botnet', 'Rogue insider': 'r-insider', 'C2 server': 'r-c2', 'Compromised host': 'r-compromised', 'Victim': 'r-victim' };
+const ROLE_CLS = { 'At-risk host': 'r-compromised', 'Malware host': 'r-c2', 'AI-driven attacker': 'r-attacker', 'Attacker': 'r-attacker', 'Botnet / spoofed': 'r-botnet', 'Rogue insider': 'r-insider', 'C2 server': 'r-c2', 'AI model API': 'r-c2', 'Compromised host': 'r-compromised', 'Victim': 'r-victim' };
 
 const S = { cap: null, A: null, idx: null, idxNT: null, view: 'overview', sel: -1, tl: 'bytes', pm: 'p', hidden: new Set(), chips: { time: null, host: null, proto: null, ev: null }, expr: '', fn: null, dirty: {}, tsel: null, stage: null, sevF: null, colorOf: new Map(), order: [], roles: new Map(), openLayers: new Set(), graph: null, pk: pkState() };
 
@@ -107,6 +107,11 @@ function setCapture(cap) {
   $('#filemeta').innerHTML = `<span class="fname" title="${esc(cap.name)}">${esc(cap.name)}</span><span class="pill">${fmtNum(cap.pk.length)} packets, ${fmtBytes(cap.size)}, ${fmtDur(cap.dur)}</span>`;
   const n = cap.threats.length, crit = cap.threats.filter(d => d.sev === 'critical').length;
   const b = $('#tbadge'); b.textContent = n; b.className = 'badge' + (n ? '' : ' ok'); b.style.background = n && !crit ? 'var(--high)' : '';
+  // AI-driven attacks are called out everywhere: a marker on the Threats tab, a notice, and a tag on every evidence packet
+  cap.aiD = cap.threats.filter(d => d.type === 'ai' || d.type === 'aitool').sort((x, y) => (y.type === 'ai') - (x.type === 'ai') || (y.ai?.sure ? 1 : 0) - (x.ai?.sure ? 1 : 0));
+  cap.aiEv = new Map(); cap.aiD.forEach(d => (d.signs || [{ name: d.title, ev: d.ev }]).forEach(g => g.ev.forEach(i => { if (!cap.aiEv.has(i)) cap.aiEv.set(i, g.name); })));
+  $('#aitab').classList.toggle('hidden', !cap.aiD.length);
+  if (cap.aiD.length) setTimeout(() => toast(aiHeadline(cap) + '. Open Threats for the evidence.'), 700);
   const h = location.hash.slice(1);
   S.view = VIEWS.includes(h) ? h : 'overview';
   // opening a capture from the start page adds a history entry, so Back (ours or the browser's) returns there
@@ -420,7 +425,7 @@ function renderOverview() {
   const internal = [...A.hosts.keys()].filter(h => isIp(h) && isPrivate(h)).length;
   const banner = D.length ? `<div class="tbanner" id="tban"><div class="ic">${SVGI(SEV_ICON.critical, 26)}</div><div><h4>${D.length} security detection${D.length > 1 ? 's' : ''}: ${['critical', 'high', 'medium', 'low'].map(s => [s, D.filter(d => d.sev === s).length]).filter(x => x[1]).map(x => x[1] + ' ' + x[0]).join(', ')}</h4><p>${esc(cap.flow ? cap.flow.story : '')}</p></div><div class="mini">${cap.flow.stages.map(s => `<i title="${esc(s.name)}${s.n ? ': ' + s.n : ': not seen'}" style="${s.n ? 'background:var(' + SEV_VAR[Object.keys(SEV_RANK).find(k => SEV_RANK[k] === s.sev)] + ')' : ''}"></i>`).join('')}<span class="btn sm">Open attack flow</span></div></div>`
     : `<div class="tbanner clean"><div class="ic">${SVGI(IC.check, 22)}</div><div><h4>No threats detected</h4><p>Checked for scans, brute force, web exploits, shells, beaconing, tunneling, exfiltration, spoofing and floods.</p></div></div>`;
-  el.innerHTML = `
+  el.innerHTML = `${aiAlertHtml(cap)}
   <div class="kpis">
     ${kpi(IC.pk, 'Packets', fmtNum(A.n), (A.n / dur).toFixed(A.n / dur < 10 ? 1 : 0) + ' packets/s avg')}
     ${kpi(IC.data, 'Data', bv + '<small>' + bu + '</small>', 'avg ' + Math.round(A.bytes / Math.max(A.n, 1)) + ' B per packet')}
@@ -440,6 +445,7 @@ function renderOverview() {
     <div class="card c4"><div class="card-h"><h3>TCP control flags</h3><span class="sub">packets</span></div><div class="card-b"><div class="bars" id="flagbars"></div></div></div>
   </div>`;
   if (D.length) $('#tban').onclick = () => go('threats');
+  wireAiAlert(el);
   $$('#tlseg button').forEach(b => { b.classList.toggle('on', b.dataset.m === S.tl); b.onclick = () => { S.tl = b.dataset.m; $$('#tlseg button').forEach(x => x.classList.toggle('on', x === b)); drawTimeline(); }; });
   $$('#pmseg button').forEach(b => { b.classList.toggle('on', b.dataset.m === S.pm); b.onclick = () => { S.pm = b.dataset.m; $$('#pmseg button').forEach(x => x.classList.toggle('on', x === b)); drawProtoBars(); }; });
   drawTimeline(); drawProtoBars(); drawTalkers(); drawPorts(); drawSizes(); drawFlags();
@@ -651,7 +657,7 @@ function renderThreats() {
   }
   const cnt = s => D.filter(d => d.sev === s).length;
   const story = esc(F.story).replace(/(\d{1,3}(?:\.\d{1,3}){3})/g, '<b class="mono" style="font-size:12.5px">$1</b>');
-  el.innerHTML = `
+  el.innerHTML = `${aiAlertHtml(cap)}
   <div class="thero">
     <div><div class="big">${D.length}</div><div class="lbl">detections</div></div>
     <div class="story"><h2>What happened</h2>${story}
@@ -665,7 +671,7 @@ function renderThreats() {
   $$('#view-threats [data-st]').forEach(x => x.onclick = () => { S.stage = S.stage === x.dataset.st ? null : x.dataset.st; renderThreats(); });
   $$('#view-threats [data-sev]').forEach(x => x.onclick = () => { S.sevF = S.sevF === x.dataset.sev ? null : x.dataset.sev; renderThreats(); });
   if ($('#clrf')) $('#clrf').onclick = () => { S.stage = null; S.sevF = null; renderThreats(); };
-  drawSequence();
+  wireAiAlert(el); drawSequence();
   drawDetections();
   if (S.tsel !== null) { const t = S.tsel; setTimeout(() => selectThreat(t, true), 60); }
 }
@@ -678,7 +684,7 @@ function seqSvg(cap, o = {}) {
   const lx = i => gut + lw * i + lw / 2;
   const li = new Map(lanes.map((l, i) => [l.id, i]));
   const sevC = k => C(SEV_VAR[k].slice(2));
-  const roleColor = r => ({ 'Attacker': 'crit', 'Botnet / spoofed': 'crit', 'Rogue insider': 'crit', 'C2 server': 'high', 'Malware host': 'high', 'Compromised host': 'med', 'At-risk host': 'med' }[r] || 'muted');
+  const roleColor = r => ({ 'AI-driven attacker': 'crit', 'Attacker': 'crit', 'Botnet / spoofed': 'crit', 'Rogue insider': 'crit', 'C2 server': 'high', 'AI model API': 'high', 'Malware host': 'high', 'Compromised host': 'med', 'At-risk host': 'med' }[r] || 'muted');
   let W = gut + lw * n + 20, body = '';
   lanes.forEach((l, i) => {
     const cut = o.compact ? 15 : 22, x = lx(i), id = l.id.length > cut ? l.id.slice(0, cut - 1) + '…' : l.id, rc = C(roleColor(l.role));
@@ -723,6 +729,32 @@ function drawSequence() {
   el.innerHTML = seqSvg(cap, { avail: el.clientWidth || 1100, sel: S.tsel, vis: d => (!S.stage || d.stage === S.stage) && (!S.sevF || d.sev === S.sevF) }).svg;
   $$('#seq .row').forEach(g => { g.onclick = () => selectThreat(+g.dataset.d, true); g.onmousemove = e => { const d = cap.threats[+g.dataset.d]; tip(`<div class="tt-h">${esc(d.title)}</div><div style="color:var(--text-2);max-width:320px">${esc(d.summary)}</div>`, e); }; g.onmouseleave = untip; });
 }
+// a plain-language headline for the AI verdict
+function aiHeadline(cap) {
+  const d = cap.aiD[0]; if (!d) return '';
+  if (d.type === 'aitool') return 'A tool written with AI was used in this capture';
+  if (d.title.startsWith('AI agent at work')) return 'An AI agent is at work on ' + d.src;
+  return (d.ai.sure ? 'AI-driven attack detected' : 'Possible AI-driven attack') + ' from ' + d.src;
+}
+// the notice at the top of Overview and Threats
+function aiAlertHtml(cap) {
+  if (!cap.aiD || !cap.aiD.length) return '';
+  const main = cap.aiD.find(d => d.type === 'ai') || cap.aiD[0];
+  const signs = main.signs ? main.signs : main.details.map(([k]) => ({ name: k.replace(/ \(strong\)$/, ''), strong: / \(strong\)$/.test(k) }));
+  const others = cap.aiD.filter(d => d !== main);
+  return `<div class="aialert" data-aid="${main.id}"><span class="aibadge">AI</span><div class="aia-t"><h4>${esc(aiHeadline(cap))}</h4>
+    <p>${main.type === 'ai' ? esc(main.src) + ' shows ' + signs.length + ' sign' + (signs.length > 1 ? 's' : '') + ' of an AI agent, ' + main.ai.strong + ' of them strong' + (main.ai.sure ? '. It moves at machine speed and retries, so act quickly.' : '. Check the evidence before you decide.') : esc(main.summary)}</p>
+    <div class="aia-signs">${signs.map(g => `<span class="${g.strong ? 'st' : ''}">${esc(g.name)}</span>`).join('')}</div>
+    ${others.length ? `<p class="aia-more">Also: ${others.map(d => esc(d.title)).join(' · ')}</p>` : ''}</div><button class="btn primary sm" data-aiopen="${main.id}">See the evidence</button></div>`;
+}
+function wireAiAlert(el) { $$('[data-aiopen]', el).forEach(b => b.onclick = e => { e.stopPropagation(); S.tsel = +b.dataset.aiopen; S.dirty.threats = 1; go('threats'); }); }
+// the evidence behind an AI verdict: one row per sign, each with the packets that show it
+function aiSignsHtml(d) {
+  const a = d.ai;
+  return `<div class="aibox"><div class="aihead"><span class="aibadge">AI</span><b>${a.sure ? 'AI-driven' : 'Possibly AI-driven'}</b><span class="hint">score ${a.score}, ${a.strong} strong sign${a.strong === 1 ? '' : 's'}</span></div>
+    <ol class="aisigns">${d.signs.map((g, k) => `<li><div class="ais-h"><b>${esc(g.name)}</b>${g.strong ? '<span class="aistrong">strong sign</span>' : ''}<span class="sp"></span><button class="btn sm" data-ais="${d.id}:${k}">${SVGI(IC.filter, 13)}Show ${fmtNum(g.ev.length)} packet${g.ev.length > 1 ? 's' : ''}</button></div><p>${esc(g.detail)}</p></li>`).join('')}</ol>
+    <p class="hint aino">No single sign proves an AI is at the keyboard: fast scripts share some of them. Strong signs are ones ordinary scanners rarely show; a verdict needs at least one.</p></div>`;
+}
 function drawDetections() {
   const cap = S.cap, D = cap.threats.filter(d => (!S.stage || d.stage === S.stage) && (!S.sevF || d.sev === S.sevF));
   $('#detcount').textContent = D.length + ' shown' + (S.stage ? ' · ' + STAGES.find(s => s.k === S.stage).name : '') + (S.sevF ? ' · ' + SEV_LABEL[S.sevF] : '');
@@ -731,13 +763,14 @@ function drawDetections() {
     <span class="stepn">${stepNo.get(d.id)}</span><div class="tline">${sevBadge(d.sev)}<h4>${esc(d.title)}</h4><span class="hint num">+${fmtRel(d.t0 - cap.t0, cap.dur)}${d.t1 > d.t0 + 0.5 ? ' to +' + fmtRel(d.t1 - cap.t0, cap.dur) : ''}, ${clock(d.t0).slice(0, 8)}</span></div>
     <div class="meta"><span class="flow">${esc(d.src)} ${roleTag(d.src)} ${SVGI(IC.arrow, 14)} ${esc(d.dst)}${d.dport ? ':' + d.dport : ''} ${roleTag(d.dst)}</span><span class="tag">${esc(STAGES.find(s => s.k === d.stage).name)}</span><a class="tag" href="${techUrl(d.tech)}" target="_blank" rel="noopener"><b style="font-weight:650">${esc(d.tech)}</b> ${esc(d.techName)} ${SVGI(IC.ext, 11)}</a></div>
     <p>${esc(d.summary)}</p>
-    <dl>${d.details.map(([k, v]) => `<dt>${esc(k)}</dt><dd ${k === 'Password' && d.secret ? 'data-secret' : ''}>${esc(v)}</dd>`).join('')}</dl>
+    ${d.signs ? aiSignsHtml(d) : `<dl>${d.details.map(([k, v]) => `<dt>${esc(k)}</dt><dd ${k === 'Password' && d.secret ? 'data-secret' : ''}>${esc(v)}</dd>`).join('')}</dl>`}
     <div class="acts"><button class="btn sm" data-ev="${d.id}">${SVGI(IC.filter, 13)}Show ${fmtNum(d.ev.length)} packet${d.ev.length > 1 ? 's' : ''}</button>${d.stream !== undefined ? `<button class="btn sm" data-fs="${d.stream}">${SVGI(IC.stream, 13)}Follow stream</button>` : ''}${d.secret ? `<button class="btn sm ghost" data-rev="${d.id}">${SVGI(IC.eye, 13)}Reveal password</button>` : ''}</div>
   </div>`).join('') || '<div class="empty">No detections match these filters</div>';
   $('#dets').onclick = e => {
     const b = e.target.closest('button');
     const card = e.target.closest('.det');
     if (b && b.dataset.ev !== undefined) { const d = cap.threats[+b.dataset.ev]; S.chips.ev = { set: new Set(d.ev), label: d.title }; S.chips.time = null; S.sel = d.ev[0]; applyFilter(); go('packets'); setTimeout(() => selectPacket(d.ev[0], true), 30); return; }
+    if (b && b.dataset.ais !== undefined) { const [di, k] = b.dataset.ais.split(':'); const d = cap.threats[+di], g = d.signs[+k]; S.chips.ev = { set: new Set(g.ev), label: 'AI evidence: ' + g.name }; S.chips.time = null; S.sel = g.ev[0]; applyFilter(); go('packets'); setTimeout(() => selectPacket(g.ev[0], true), 30); return; }
     if (b && b.dataset.fs !== undefined) { followStream(+b.dataset.fs); return; }
     if (b && b.dataset.rev !== undefined) { const d = cap.threats[+b.dataset.rev]; const dd = $('[data-secret]', card); const shown = dd.dataset.shown === '1'; dd.textContent = shown ? mask(d.secret) : d.secret; dd.dataset.shown = shown ? '0' : '1'; b.innerHTML = SVGI(IC.eye, 13) + (shown ? 'Reveal password' : 'Hide password'); return; }
     if (card && !e.target.closest('a')) selectThreat(+card.dataset.d, false);

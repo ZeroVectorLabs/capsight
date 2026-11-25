@@ -79,3 +79,27 @@ test('reads pcapng with a nanosecond interface', () => {
 test('rejects files that are not captures', async () => {
   await assert.rejects(E.loadCapture(new TextEncoder().encode('hello, this is not a pcap file at all'), 'x.txt'), /Not a pcap/);
 });
+
+const artexP = E.loadCapture(new Uint8Array(readFileSync(root + 'samples/artex_ai_attack.pcap')), 'artex_ai_attack.pcap');
+
+test('calls the ARTEX-style sample an AI-driven attack, with evidence for each sign', async () => {
+  const cap = await artexP;
+  const ai = cap.threats.find(d => d.type === 'ai' && d.src === '203.0.113.45');
+  assert.ok(ai, 'no AI verdict for the attacker');
+  assert.ok(ai.ai.sure);
+  const signs = new Set(ai.signs.map(g => g.key));
+  for (const k of ['map', 'replay', 'loop']) assert.ok(signs.has(k), 'missing sign ' + k);
+  for (const g of ai.signs) assert.ok(g.ev.length > 0, 'sign without packets: ' + g.key);
+  const types = new Set(cap.threats.map(d => d.type));
+  for (const t of ['webshell', 'imds', 'ldaprecon', 'kerberoast', 'lateral', 'exfil', 'llmcalls', 'aitool']) assert.ok(types.has(t), 'missing detection ' + t);
+  const tool = cap.threats.find(d => d.type === 'aitool');
+  assert.ok(tool.details.some(([k]) => k.startsWith('Chat-style preamble')));
+  const role = id => cap.flow.lanes.find(l => l.id === id)?.role;
+  assert.equal(role('203.0.113.45'), 'AI-driven attacker');
+  assert.equal(role('104.18.2.115'), 'AI model API');
+});
+
+test('does not call the classic scripted intrusion AI-driven', async () => {
+  const cap = await capP;
+  assert.equal(cap.threats.filter(d => d.type === 'ai' || d.type === 'aitool').length, 0);
+});

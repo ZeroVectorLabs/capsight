@@ -40,12 +40,12 @@ async function reportModel(opts = {}) {
   const stageName = k => (STAGES.find(s => s.k === k) || { name: k }).name;
   const lanes = F ? F.lanes : [];
   const role = r => lanes.filter(l => l.role === r).map(l => l.id);
-  const attackers = role('Attacker'), spoofed = role('Botnet / spoofed').length > 0, insiders = role('Rogue insider');
+  const attackers = role('Attacker').concat(role('AI-driven attacker')), spoofed = role('Botnet / spoofed').length > 0, insiders = role('Rogue insider');
   const compromised = role('Compromised host'), atRisk = role('At-risk host'), c2 = role('C2 server'), malware = role('Malware host');
   const creds = A.creds, files = A.files.filter(f => f.interesting && f.flags.length);
   /* the people in the story, one line each */
   const facts = [];
-  if (attackers.length || spoofed) facts.push(['Attacker', attackers.length ? listText(attackers) + (spoofed ? ', plus spoofed source addresses' : '') : 'Spoofed source addresses']);
+  if (attackers.length || spoofed) facts.push([role('AI-driven attacker').length ? 'AI-driven attacker' : 'Attacker', attackers.length ? listText(attackers) + (spoofed ? ', plus spoofed source addresses' : '') : 'Spoofed source addresses']);
   if (insiders.length) facts.push(['Rogue insider', listText(insiders)]);
   if (compromised.length) facts.push(['Compromised', listText(compromised)]);
   if (atRisk.length) facts.push(['At risk', listText(atRisk)]);
@@ -66,6 +66,11 @@ async function reportModel(opts = {}) {
     const users = uniqList(creds.map(c => c.user)), protos = uniqList(creds.map(c => c.proto.split(' ')[0]).filter(p => /^[A-Z0-9]{2,}$/.test(p) && p !== 'AWS'));
     actions.push('Reset the ' + creds.length + ' credential' + (creds.length > 1 ? 's' : '') + ' seen in clear text' + (users.length ? ' (' + listText(users, 5) + ')' : '') + (protos.length ? ', and move ' + listText(protos, 5) + ' to an encrypted alternative' : '') + '.');
   }
+  const aiD = D.filter(d => d.type === 'ai' && d.ai.sure);
+  if (aiD.length) actions.push('Treat this as an AI-driven attack: it moves at machine speed and will retry. Take down machine-readable maps of your apps (API specs, robots entries) that are not needed in public, require authentication on every endpoint, and alert on the signs listed under the AI detection.');
+  if (D.some(d => d.type === 'imds')) actions.push('Revoke the cloud tokens the server took from the metadata service, rotate any storage keys listed with them, and limit what the server\'s managed identity can do.');
+  if (D.some(d => d.type === 'kerberoast')) actions.push('Change the passwords of the service accounts that were kerberoasted, and turn off RC4 for Kerberos.');
+  if (D.some(d => d.type === 'webshell')) actions.push('Remove the web shell, close the upload path it came through, and check the web server for other new script files.');
   if (files.length) actions.push('Look up the SHA-256 of the ' + files.length + ' suspicious file' + (files.length > 1 ? 's' : '') + ' below in your threat-intel tools and remove them from the hosts that received them.');
   let flow = null;
   if (F && D.length) { const r = seqSvg(cap, { col: k => RPT_COL[k] || RPT_COL.muted, avail: 1000, minLane: 98, compact: true, font: RPT_FONT, bg: '#ffffff' }); flow = r; }
