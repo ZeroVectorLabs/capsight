@@ -228,11 +228,32 @@ Open it with **Choose a capture file**. Regenerate it with `npm run sample:artex
 
 ## Detections
 
+### AI-driven attacks
+
+Capsight checks every attacker for the signs that AI agent frameworks such as ARTEX leave on the wire, and shows each sign with the packets behind it:
+
+| Sign | What Capsight looks for | Strength |
+|---|---|---|
+| Read the target's API map, then used it | `swagger.json`, `openapi.json`, `robots.txt`, `llms.txt` or similar fetched first, then the paths they list requested next | strong |
+| Replayed the same attack run | A run of 8 or more requests repeated step for step, in the same order, seconds or minutes later | strong |
+| Recheck loop at a fixed interval | The same URL polled at least 5 times, 10 s or more apart, with under 5% variation | strong |
+| Talks to an AI model API | A host in the attack connecting to OpenAI, Anthropic, Google, xAI, Mistral, Groq, OpenRouter, DeepSeek, Azure OpenAI, Bedrock and similar APIs | strong |
+| Machine-speed, evenly timed requests | 20 or more requests in a burst with an even, sub-second gap | weak |
+| Scripted client used by agent frameworks | User-Agents such as `python-httpx`, `aiohttp`, `Go-http-client`, LangChain or Playwright | weak |
+| Kill chain at machine pace | From first contact to code execution in under three minutes | weak |
+
+No single sign proves that an AI is driving, because fast scripts share some of them, so the verdict needs at least one strong sign. **AI-driven attack** (critical) needs a score of 5 and two strong signs; **Possibly AI-driven** (medium) needs a score of 3 and one. A host in the attack that keeps calling a model API gets **AI agent at work on compromised host**, and its steady calls are labelled as model API calls rather than C2. The attacker's role becomes **AI-driven attacker** in the attack flow, the network map and the report, which also lists AI-specific response steps. These are traffic heuristics, documented here so you can judge them.
+
+### Everything else
+
+
 | Area | What is detected | ATT&amp;CK |
 |---|---|---|
 | Reconnaissance | SYN, NULL, FIN, Xmas and UDP port scans (with open ports found), horizontal scans, ping and ARP sweeps, attack-tool user agents, forced browsing | T1595, T1046, T1018 |
 | Initial access | SQL injection, XSS, path traversal, command injection, Log4Shell, Shellshock, Heartbleed, with signs of success read from the response | T1190 |
-| Credential access | SSH, FTP, RDP, SMB, database and web-login brute force; cleartext credentials; ARP spoofing; rogue DHCP | T1110, T1040, T1557 |
+| Web shells | A server-script file uploaded through the app and then driven with `?cmd=` requests, with the commands run | T1505.003 |
+| Credential access | SSH, FTP, RDP, SMB, database and web-login brute force; cleartext credentials (including LDAP simple binds); ARP spoofing; rogue DHCP; cloud tokens taken from the instance metadata service (Azure, AWS, Google Cloud); kerberoasting, with RC4 requests flagged | T1110, T1040, T1557, T1552.005, T1558.003 |
+| Discovery | Active Directory reconnaissance over LDAP (service accounts, admins, LAPS passwords, trusts) | T1087.002 |
 | Execution | Interactive and reverse shells over TCP, with the commands issued | T1059.004 |
 | Lateral movement | Internal hosts probing other internal hosts on SMB, RDP, SSH, WinRM or VNC | T1021 |
 | Command and control | Periodic beaconing, sessions on backdoor ports, tool and stager downloads, executables disguised as other file types, NXDOMAIN bursts (DGA), ICMP tunnels | T1071, T1571, T1105, T1036.008, T1568.002, T1095 |

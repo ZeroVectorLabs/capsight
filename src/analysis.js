@@ -154,6 +154,7 @@ function mask(pw) { if (!pw) return ''; return pw.length <= 2 ? '••' : pw[0]
 
 const STAGES = [
   { k: 'recon', name: 'Reconnaissance', ta: 'TA0043' },
+  { k: 'resource', name: 'Resource Development', ta: 'TA0042' },
   { k: 'access', name: 'Initial Access', ta: 'TA0001' },
   { k: 'exec', name: 'Execution', ta: 'TA0002' },
   { k: 'cred', name: 'Credential Access', ta: 'TA0006' },
@@ -560,16 +561,188 @@ function detectThreats(cap) {
     }
     if (s.proto === 'Telnet' && s.pll) { const k = s.src + '|' + s.dst + '|Telnet|'; if (!creds.has(k)) creds.set(k, { src: s.dirA ? s.src : s.dst, dst: s.dirA ? s.dst : s.src, proto: 'Telnet', user: '(interactive)', pw: '', ev: [] }); creds.get(k).ev.push(r.i); }
   }
+  // ---------- 14. Web shells ----------
+  const SHELL_EXT = /\.(aspx?|ashx|asmx|php\d?|phtml|jspx?|cfm|cgi|pl)$/i;
+  const shells = new Map();
+  const shellOf = (src, dst, path) => { const k = src + '|' + dst + '|' + path.toLowerCase(); let o = shells.get(k); if (!o) { o = { src, dst, path, upload: null, cmds: [], ev: [], ok: 0 }; shells.set(k, o); } return o; };
+  for (const r of pk) {
+    const h = r.s.http; if (!h || h.resp) continue;
+    const body = h.body || '';
+    const up = h.method === 'POST' && body.match(/filename="([^"]+)"/i);
+    if (up && SHELL_EXT.test(up[1])) { const o = shellOf(r.s.src, r.s.dst, up[1]); o.upload = { i: r.i, uri: h.uri, name: up[1], code: /<%|<\?php|Runtime\.getRuntime|Request\[|eval\(|system\(|exec\(/i.test(body) }; o.ev.push(r.i); if (h.respIdx !== undefined) o.ev.push(h.respIdx); }
+    const path = safeDecode((h.uri || '').split('?')[0]), q = safeDecode((h.uri || '').split('?')[1] || '');
+    const cm = q.match(/(?:^|&)(cmd|exec|command|c|run|q)=([^&]*)/i);
+    if (cm && SHELL_EXT.test(path)) { const o = shellOf(r.s.src, r.s.dst, path.split('/').pop()); o.path2 = path; o.cmds.push(cm[2]); o.ev.push(r.i); if (h.respIdx !== undefined) { o.ev.push(h.respIdx); if (h.status === 200) o.ok++; } }
+  }
+  for (const o of shells.values()) {
+    if (!(o.upload && o.cmds.length) && !(o.cmds.length >= 3 && o.ok)) continue;
+    const uniq = [...new Set(o.cmds)];
+    add({ type: 'webshell', title: 'Web shell ' + (o.upload ? 'uploaded and used' : 'in use') + ': ' + (o.path2 || o.path), sev: 'critical', stage: 'exec', tech: 'T1505.003', techName: 'Server Software Component: Web Shell', src: o.src, dst: o.dst, count: o.cmds.length,
+      summary: o.src + (o.upload ? ' uploaded ' + o.upload.name + ' through ' + o.upload.uri.split('?')[0] + ' and then' : '') + ' ran ' + o.cmds.length + ' command' + (o.cmds.length > 1 ? 's' : '') + ' through it on ' + o.dst + ': ' + uniq.slice(0, 5).map(c => '"' + c + '"').join(', ') + (uniq.length > 5 ? ', …' : '') + '.',
+      details: [['Shell', o.path2 || o.path], ['Uploaded through', o.upload ? o.upload.uri.split('?')[0] + (o.upload.code ? ' (server-side code in the upload)' : '') : '—'], ['Commands', uniq.slice(0, 15).join('\n')], ['Requests', o.cmds.length + ' (' + o.ok + ' answered 200)']], ev: o.ev.sort((a, b) => a - b) });
+  }
+
+  // ---------- 15. Cloud credentials from the instance metadata service ----------
+  const IMDS_HOSTS = new Set(['169.254.169.254', 'fd00:ec2::254', '169.254.170.2']);
+  const imds = new Map();
+  for (const r of pk) {
+    const h = r.s.http; if (!h || h.resp || !(IMDS_HOSTS.has(r.s.dst) || /metadata\.google\.internal/i.test(h.host || ''))) continue;
+    const u = h.uri || '';
+    const cred = /(identity\/oauth2\/token|iam\/security-credentials|service-accounts\/[^/]+\/token|\/latest\/api\/token|credentials)/i.test(u);
+    let o = imds.get(r.s.src); if (!o) { o = { src: r.s.src, dst: r.s.dst, paths: [], cred: 0, token: false, res: new Set(), ev: [] }; imds.set(r.s.src, o); }
+    o.paths.push(h.method + ' ' + (u.length > 120 ? u.slice(0, 120) + '…' : u)); o.ev.push(r.i); if (cred) o.cred++;
+    const rm = u.match(/resource=([^&]+)/); if (rm) o.res.add(safeDecode(rm[1]));
+    if (h.respIdx !== undefined) { o.ev.push(h.respIdx); if (/"(access_token|AccessKeyId|Token)"/.test(payloadText(cap, h.respIdx, 4096))) o.token = true; }
+  }
+  for (const o of imds.values()) if (o.cred) add({ type: 'imds', title: 'Cloud credentials taken from instance metadata', sev: o.token ? 'critical' : 'high', stage: 'cred', tech: 'T1552.005', techName: 'Unsecured Credentials: Cloud Instance Metadata API', src: o.src, dst: o.dst, count: o.cred,
+    summary: o.src + ' asked the cloud instance metadata service for ' + o.cred + ' credential token' + (o.cred > 1 ? 's' : '') + (o.res.size ? ' (for ' + [...o.res].join(', ') + ')' : '') + (o.token ? ' and received ' + (o.cred > 1 ? 'them' : 'it') : '') + '. Code running on a compromised server can use these to act as the server in the cloud.',
+    details: [['Requests', o.paths.slice(0, 8).join('\n')], ['Resources', [...o.res].join('\n') || '—'], ['Token returned', o.token ? 'Yes' : 'Not seen']], ev: o.ev.sort((a, b) => a - b) });
+
+  // ---------- 16. LDAP: cleartext binds and Active Directory reconnaissance ----------
+  const ldapRecon = new Map();
+  const berLen = (u, p) => { const b = u[p]; if (b < 128) return [b, p + 1]; const n = b & 127; let v = 0; for (let k = 0; k < n; k++) v = v * 256 + u[p + 1 + k]; return [v, p + 1 + n]; };
+  const SENSITIVE = /(servicePrincipalName|adminCount|ms-Mcs-AdmPwd|msLAPS|trustPartner|memberOf|userAccountControl|unicodePwd|msDS-AllowedToDelegateTo|gMSA|msDS-ManagedPassword)/i;
+  for (const r of pk) {
+    const s = r.s; if (s.l4 !== 'TCP' || s.dp !== 389 || !s.pll) continue;
+    const u = cap.u8, a0 = r.off + s.plo, e = a0 + s.pll;
+    if (u[a0] !== 0x30) continue;
+    let [, p] = berLen(u, a0 + 1); if (u[p] !== 0x02) continue; p = p + 2 + u[p + 1];
+    const op = u[p];
+    if (op === 0x60) { // BindRequest: version, name, simple password [0]
+      let [, q] = berLen(u, p + 1); q += 3; if (u[q] !== 0x04) continue;
+      let nl; [nl, q] = berLen(u, q + 1); const name = latin(u, q, q + nl, 256); q += nl;
+      if (u[q] === 0x80) { let pl; [pl, q] = berLen(u, q + 1); if (pl > 0) addCred(r, 'LDAP', name, latin(u, q, q + pl, 128), 'simple bind'); }
+    }
+    if (op === 0x63) {
+      let o = ldapRecon.get(s.src + '|' + s.dst); if (!o) { o = { src: s.src, dst: s.dst, n: 0, attrs: new Set(), base: '', ev: [] }; ldapRecon.set(s.src + '|' + s.dst, o); }
+      o.n++; o.ev.push(r.i);
+      const txt = latin(u, a0, e, 4096);
+      (txt.match(/[A-Za-z][\w-]{3,40}/g) || []).forEach(w => { if (SENSITIVE.test(w)) o.attrs.add(w); });
+      const bm = txt.match(/((?:CN|OU|DC)=[\w-]+(?:,(?:CN|OU|DC)=[\w-]+)*)/i); if (bm && !o.base) o.base = bm[1];
+    }
+  }
+  for (const o of ldapRecon.values()) if (o.n >= 3 && o.attrs.size >= 2) add({ type: 'ldaprecon', title: 'Active Directory reconnaissance over LDAP', sev: 'high', stage: 'disc', tech: 'T1087.002', techName: 'Account Discovery: Domain Account', src: o.src, dst: o.dst, count: o.n,
+    summary: o.src + ' ran ' + o.n + ' LDAP searches against ' + o.dst + (o.base ? ' (' + o.base + ')' : '') + ' asking for ' + [...o.attrs].join(', ') + ': the attributes used to find service accounts, admins and local admin passwords.',
+    details: [['Searches', o.n], ['Sensitive attributes', [...o.attrs].join('\n')], ['Base', o.base || '—']], ev: o.ev });
   cap.credList = [...creds.values()];
   for (const o of creds.values()) {
     add({ type: 'cleartext', title: 'Cleartext ' + o.proto + ' credentials', sev: o.proto === 'Telnet' ? 'medium' : 'medium', stage: 'cred', tech: 'T1040', techName: 'Network Sniffing (exposed credentials)', src: o.src, dst: o.dst, count: o.ev.length, secret: o.pw, summary: o.src + ' sent ' + o.proto + ' credentials' + (o.user ? ' for user "' + o.user + '"' : '') + ' to ' + o.dst + ' without encryption. Anyone on the path can read them.', details: [['Protocol', o.proto], ['Username', o.user || '—'], ['Password', o.pw ? mask(o.pw) : '—'], ['Resource', o.extra || '—']], ev: o.ev });
   }
 
+
+
+  // ---------- 17. Kerberoasting ----------
+  const kerb = new Map();
+  for (const r of pk) {
+    const s = r.s; if (s.dp !== 88 || !s.pll) continue;
+    const u = cap.u8, a0 = r.off + s.plo + (s.l4 === 'TCP' ? 4 : 0), e = r.off + s.plo + s.pll;
+    if (u[a0] !== 0x6c) continue; // TGS-REQ
+    const strs = []; for (let q = a0; q < e - 2; q++) if (u[q] === 0x1b && u[q + 1] > 1 && u[q + 1] < 80 && q + 2 + u[q + 1] <= e) { const v = latin(u, q + 2, q + 2 + u[q + 1], 80); if (/^[\x21-\x7e]+$/.test(v)) { strs.push(v); q += 1 + u[q + 1]; } }
+    const parts = strs.filter(x => !/^[A-Z0-9-]+(\.[A-Z0-9-]+)+$/.test(x));
+    if (parts.length < 2) continue;
+    const spn = parts.join('/');
+    if (/^krbtgt\//i.test(spn)) continue;
+    const rc4 = /\x02\x01\x17/.test(latin(u, a0, e, 2048));
+    let o = kerb.get(s.src); if (!o) { o = { src: s.src, dst: s.dst, spns: new Set(), rc4: 0, ev: [] }; kerb.set(s.src, o); }
+    o.spns.add(spn); if (rc4) o.rc4++; o.ev.push(r.i);
+  }
+  for (const o of kerb.values()) if (o.spns.size >= 3) add({ type: 'kerberoast', title: 'Kerberoasting (' + o.spns.size + ' service tickets)', sev: 'high', stage: 'cred', tech: 'T1558.003', techName: 'Steal or Forge Kerberos Tickets: Kerberoasting', src: o.src, dst: o.dst, count: o.spns.size,
+    summary: o.src + ' requested Kerberos service tickets for ' + o.spns.size + ' service accounts' + (o.rc4 ? ', asking for weak RC4 encryption' : '') + '. The tickets can be cracked offline to recover the accounts\' passwords.',
+    details: [['Service principal names', [...o.spns].join('\n')], ['RC4 requested', o.rc4 ? o.rc4 + ' of ' + o.ev.length + ' requests' : 'No']], ev: o.ev });
+
+  // ---------- 18. Is the attacker an AI agent? ----------
+  aiAssess(cap, D, add);
   D.sort((a, b) => a.t0 - b.t0 || SEV_RANK[b.sev] - SEV_RANK[a.sev]);
   D.forEach((d, i) => { d.id = i; d.evSet = null; });
   return D;
 }
 
+
+/* ===================== AI-driven attack assessment ===================== */
+// AI agent frameworks (ARTEX and its "siblings") leave a recognisable shape on the wire.
+// No single sign proves an AI is driving: scripts are fast too. So each sign carries a weight
+// and its own packets, "strong" signs are ones ordinary scanners rarely show, and the verdict
+// needs at least one strong sign. The evidence is listed sign by sign so an analyst can check it.
+const LLM_API = /(^|\.)(api\.openai\.com|api\.anthropic\.com|generativelanguage\.googleapis\.com|aiplatform\.googleapis\.com|api\.x\.ai|api\.mistral\.ai|api\.groq\.com|openrouter\.ai|api\.deepseek\.com|api\.together\.xyz|api\.cohere\.(ai|com)|api\.perplexity\.ai|api\.fireworks\.ai|openai\.azure\.com|bedrock-runtime\.[\w-]+\.amazonaws\.com|api\.moonshot\.cn|dashscope\.aliyuncs\.com|ollama\.com)$/i;
+const AGENT_UA = /(python-httpx|python-requests|aiohttp|Go-http-client|node-fetch|axios|undici|okhttp|libwww-perl|httpie|langchain|llama[-_ ]?index|crewai|autogen|browser-use|openai|anthropic|HeadlessChrome|Playwright|puppeteer)/i;
+const API_MAP = /(swagger(\.json|\/v\d+\/swagger\.json|-ui)?|openapi\.(json|ya?ml)|api-docs|\.well-known\/(openid-configuration|ai-plugin\.json|mcp|security\.txt)|graphql|robots\.txt|sitemap\.xml|llms\.txt)(\?|$)/i;
+function aiAssess(cap, D, add) {
+  const pk = cap.pk;
+  const reqs = new Map(); // src → [{i, t, dst, key, ua}]
+  for (const r of pk) { const h = r.s.http; if (!h || h.resp) continue; let a = reqs.get(r.s.src); if (!a) { a = []; reqs.set(r.s.src, a); } a.push({ i: r.i, t: r.t, dst: r.s.dst, key: h.method + ' ' + (h.uri || ''), path: (h.uri || '').split('?')[0], ua: h.ua || '', h }); }
+  // hosts that talk to AI model APIs (by TLS server name or DNS question)
+  const llm = new Map(); cap.llmIps = new Map();
+  for (const r of pk) { const s = r.s; const nm = s.sni || (s.dns && !s.dns.qr && s.dns.qs[0] ? s.dns.qs[0].name : ''); if (s.dns && s.dns.qr && s.dns.qs[0] && LLM_API.test(s.dns.qs[0].name.replace(/\.$/, ''))) (s.dns.ans || []).forEach(a => { if (a.type === 'A' || a.type === 'AAAA') cap.llmIps.set(a.val, s.dns.qs[0].name.replace(/\.$/, '')); }); if (nm && LLM_API.test(nm.replace(/\.$/, '')) && !(s.dns && s.dns.qr)) { if (s.sni) cap.llmIps.set(s.dst, nm); let o = llm.get(s.src); if (!o) { o = { names: new Set(), ev: [] }; llm.set(s.src, o); } o.names.add(nm.replace(/\.$/, '')); o.ev.push(r.i); } }
+  // who to assess: every source of a detection that is not just a victim, plus anyone calling an AI API who is also in a detection
+  const bySrc = new Map(); D.forEach(d => { if (!isIp(d.src)) return; (bySrc.get(d.src) || bySrc.set(d.src, []).get(d.src)).push(d); });
+  const involved = new Set(D.flatMap(d => [d.src, d.dst, ...(d.targets || [])]));
+  const cands = new Set([...bySrc.keys()].filter(ip => !isPrivate(ip) || bySrc.get(ip).some(d => ['lateral', 'hscan', 'ldaprecon', 'kerberoast', 'imds', 'exfil'].includes(d.type))));
+  for (const ip of llm.keys()) if (involved.has(ip)) cands.add(ip);
+  const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+  const cvOf = a => { const m = mean(a); return m ? Math.sqrt(mean(a.map(x => (x - m) ** 2))) / m : 1; };
+  const trim = a => { const b = a.slice().sort((x, y) => x - y), k = Math.floor(b.length * 0.1); return b.slice(k, b.length - k); }; // ignore the odd pause
+  for (const src of cands) {
+    const R = (reqs.get(src) || []).sort((a, b) => a.t - b.t);
+    const signs = [];
+    const sign = (key, name, weight, strong, detail, ev) => signs.push({ key, name, weight, strong, detail, ev: [...new Set(ev)].sort((a, b) => a - b) });
+    // 1. machine-speed, metronome-regular requests (bursts of ≥20 with a tiny, even gap)
+    let best = null;
+    for (let a = 0; a < R.length; ) {
+      let b = a; while (b + 1 < R.length && R[b + 1].t - R[b].t < 1.5) b++;
+      if (b - a + 1 >= 20) { const gaps = trim(Array.from({ length: b - a }, (_, k) => R[a + k + 1].t - R[a + k].t)); const m = mean(gaps), cv = cvOf(gaps); if (cv < 0.6 && (!best || b - a > best.n)) best = { n: b - a + 1, m, cv, ev: R.slice(a, b + 1).map(x => x.i) }; }
+      a = b + 1;
+    }
+    if (best) sign('speed', 'Machine-speed, evenly timed requests', 1, false, best.n + ' requests about every ' + fmtDur(best.m) + ' with ' + (best.cv * 100).toFixed(0) + '% variation in the gap. People click unevenly; agents and scripts do not.', best.ev);
+    // 2. read a machine-readable map of the target first, then used what it listed
+    const maps = R.filter(x => API_MAP.test(x.path) && x.h.status === 200);
+    if (maps.length) {
+      const listed = new Set(); maps.forEach(m => { if (m.h.respIdx === undefined) return; const body = payloadText(cap, m.h.respIdx, 65536); (body.match(/"(\/[\w\-./{}]+)"\s*:/g) || []).forEach(x => listed.add(x.slice(1, -2).replace(/\{[^}]+\}/g, ''))); (body.match(/^(?:dis)?allow:\s*(\/\S*)/gim) || []).forEach(x => listed.add(x.split(/:\s*/)[1])); });
+      const used = R.filter(x => !API_MAP.test(x.path) && [...listed].some(l => l.length > 1 && x.path.startsWith(l.replace(/\/$/, ''))) && x.t > maps[0].t);
+      if (used.length) sign('map', 'Read the target\'s API map, then used it', 2, true, 'Fetched ' + [...new Set(maps.map(m => m.path))].join(', ') + ' first, then went straight to ' + [...new Set(used.map(u => u.path))].slice(0, 4).join(', ') + '. AI agents read machine-readable maps to plan their next step.', maps.map(m => m.i).concat(maps.map(m => m.h.respIdx).filter(x => x !== undefined), used.slice(0, 20).map(u => u.i)));
+    }
+    // 3. the same multi-step sequence replayed identically later
+    const W = 8, seen = new Map(); let rep = null;
+    for (let k = 0; k + W <= R.length; k++) {
+      const sig = R.slice(k, k + W).map(x => x.dst + ' ' + x.key).join('\n');
+      const first = seen.get(sig);
+      if (first === undefined) { seen.set(sig, k); continue; }
+      if (R[k].t - R[first].t < 5) continue;
+      let n = W; while (k + n < R.length && first + n < k && R[k + n].dst + R[k + n].key === R[first + n].dst + R[first + n].key) n++;
+      if (!rep || n > rep.n) rep = { n, gap: R[k].t - R[first].t, a: first, b: k };
+      k += n - 1;
+    }
+    if (rep) sign('replay', 'Replayed the same attack run', 3, true, 'A run of ' + rep.n + ' requests was repeated step for step ' + fmtDur(rep.gap) + ' later, in the same order. Agent frameworks re-run a plan when a step needs confirming.', R.slice(rep.a, rep.a + rep.n).concat(R.slice(rep.b, rep.b + rep.n)).map(x => x.i));
+    // 4. a fixed-interval "recheck loop" on the same URL
+    const byKey = new Map(); R.forEach(x => { const k = x.dst + ' ' + x.key; (byKey.get(k) || byKey.set(k, []).get(k)).push(x); });
+    let loop = null;
+    for (const [k, xs] of byKey) { if (xs.length < 5) continue; const gaps = []; for (let j = 1; j < xs.length; j++) gaps.push(xs[j].t - xs[j - 1].t); const m = mean(gaps), cv = cvOf(gaps); if (m >= 10 && cv < 0.05 && (!loop || xs.length > loop.n)) loop = { k, n: xs.length, m, cv, ev: xs.map(x => x.i) }; }
+    if (loop) sign('loop', 'Recheck loop at a fixed interval', 2, true, loop.k.replace(/^\S+ /, '') + ' polled ' + loop.n + ' times every ' + fmtDur(loop.m) + ' (±' + (loop.cv * 100).toFixed(1) + '%). Public reports on ARTEX describe polling loops like this.', loop.ev);
+    // 5. HTTP clients that agent frameworks use
+    const uas = new Map(); R.forEach(x => { const m = x.ua.match(AGENT_UA); if (m) (uas.get(x.ua) || uas.set(x.ua, []).get(x.ua)).push(x.i); });
+    if (uas.size) { const [ua, ev] = [...uas].sort((a, b) => b[1].length - a[1].length)[0]; sign('ua', 'Scripted client used by AI agent frameworks', 1, false, '"' + ua + '" on ' + ev.length + ' requests, a library agent frameworks drive, not a browser.', ev); }
+    // 6. many ATT&CK stages within minutes of the first step
+    const mine = D.filter(d => d.src === src || (d.dst === src && d.type === 'webshell'));
+    const tactics = new Set(D.filter(d => d.src === src || involved.has(src) && (d.src === src)).map(d => d.stage));
+    const t0 = Math.min(...mine.map(d => d.t0)), access = mine.filter(d => ['access', 'exec'].includes(d.stage)).map(d => d.t0);
+    const firstAccess = access.length ? Math.min(...access) - t0 : Infinity;
+    if (!isPrivate(src) && tactics.size >= 2 && firstAccess < 180) sign('pace', 'Kill chain at machine pace', 1, false, 'From first contact to ' + (mine.find(d => d.t0 - t0 === firstAccess)?.title.toLowerCase() || 'access') + ' in ' + fmtDur(firstAccess) + ', across ' + tactics.size + ' ATT&CK tactics.', mine.flatMap(d => d.ev.slice(0, 3)));
+    // 7. talks to an AI model API itself
+    const L = llm.get(src);
+    if (L) sign('llm', 'Talks to an AI model API', 3, true, src + ' connected to ' + [...L.names].join(', ') + (isPrivate(src) ? ' while it was part of the attack: an agent may be running on it.' : '.'), L.ev);
+    const score = signs.reduce((a, x) => a + x.weight, 0), strong = signs.filter(x => x.strong).length;
+    if (!strong || score < 3) continue;
+    const onHost = isPrivate(src) && !!L; // an agent running on one of our own machines
+    const sure = onHost || (score >= 5 && strong >= 2);
+    const ev = [...new Set(signs.flatMap(x => x.ev))].sort((a, b) => a - b);
+    const dst = onHost ? ([...cap.llmIps].find(([, n]) => L.names.has(n)) || [[...L.names][0]])[0] : mine.length ? [...new Set(mine.map(d => d.dst))].filter(isIp)[0] || mine[0].dst : '';
+    add({ type: 'ai', title: onHost ? 'AI agent at work on compromised host ' + src : (sure ? 'AI-driven attack' : 'Possibly AI-driven attack') + ': ' + signs.length + ' sign' + (signs.length > 1 ? 's' : '') + ' of an AI agent', sev: onHost ? 'high' : sure ? 'critical' : 'medium', stage: 'resource', tech: 'T1588.007', techName: 'Obtain Capabilities: Artificial Intelligence', src, dst, count: signs.length, ai: { score, strong, sure },
+      t0: pk[ev[0]].t, t1: pk[ev[ev.length - 1]].t, signs,
+      summary: (onHost ? src + ' was part of the attack and kept calling an AI model API (' + [...L.names].join(', ') + '): an AI agent is likely running on it, deciding the next steps. ' : sure ? src + ' behaves like an AI agent, not a person or a plain scanner. ' : src + ' shows some signs of an AI agent. ') + 'The signs: ' + signs.map(x => x.name[0].toLowerCase() + x.name.slice(1)).join('; ') + '. Each one is listed with its packets below.',
+      details: signs.map(x => [x.name + (x.strong ? ' (strong)' : ''), x.detail]).concat([['Score', score + ' (' + strong + ' strong sign' + (strong === 1 ? '' : 's') + '; a verdict needs at least one strong sign)']]), ev });
+  }
+  // regular calls to an AI model API are the agent thinking, not a C2 check-in
+  for (const d of D) if (d.type === 'beacon' && cap.llmIps.has(d.dst)) { const nm = cap.llmIps.get(d.dst); d.type = 'llmcalls'; d.title = 'Regular calls to an AI model API (' + nm + ')'; d.sev = 'high'; d.stage = 'resource'; d.tech = 'T1588.007'; d.techName = 'Obtain Capabilities: Artificial Intelligence'; d.summary = d.src + ' called ' + nm + ' ' + d.count + ' times at a steady rhythm while the attack ran: the pattern of an agent asking a model for its next step.'; }
+}
 /* ===================== Attack flow model ===================== */
 function buildAttackFlow(cap, D) {
   if (!D.length) return null;
@@ -593,12 +766,13 @@ function buildAttackFlow(cap, D) {
   for (const [id, a] of actors) {
     const asSrc = steps.filter(s => s.src === id), asDst = steps.filter(s => s.dst === id);
     const mac = isMac(id), priv = mac || (isIp(id) && isPrivate(id));
-    if (c2s.has(id)) a.role = 'C2 server';
+    if (cap.llmIps && cap.llmIps.has(id)) a.role = 'AI model API';
+    else if (c2s.has(id)) a.role = 'C2 server';
     else if (malSrc.has(id)) a.role = 'Malware host';
     else if (id === 'Spoofed sources') a.role = 'Botnet / spoofed';
     else if (id === 'LAN hosts') a.role = 'Internal network';
     else if (!mac && !isIp(id)) a.role = 'External domain';
-    else if (!priv && asSrc.length) a.role = 'Attacker';
+    else if (!priv && asSrc.length) a.role = D.some(d => d.type === 'ai' && d.src === id && d.ai.sure) ? 'AI-driven attacker' : 'Attacker';
     else if (priv && asSrc.some(s => ['lateral', 'beacon', 'shell', 'exfil', 'dnstunnel', 'sweep', 'hscan'].includes(s.d.type)) || (asSrc.some(s => s.d.type === 'download') && asSrc.length > 1 && asSrc.some(s => s.d.type !== 'download' && s.d.type !== 'cleartext'))) a.role = 'Compromised host';
     else if (priv && asSrc.some(s => s.d.type === 'download')) a.role = 'At-risk host';
     else if (priv && asSrc.some(s => s.d.type === 'arpspoof')) a.role = 'Rogue insider';
@@ -606,20 +780,23 @@ function buildAttackFlow(cap, D) {
     else if (asSrc.length && asSrc.every(s => s.d.type === 'cleartext')) a.role = 'Internal client';
     else a.role = priv ? 'Internal host' : 'External host';
   }
-  const order = { 'At-risk host': 4.5, 'Malware host': 9.5, 'Attacker': 0, 'Botnet / spoofed': 1, 'Rogue insider': 2, 'Internal client': 3, 'Compromised host': 4, 'Victim': 5, 'Internal network': 6, 'Internal host': 7, 'External host': 8, 'External domain': 9, 'C2 server': 10 };
+  const order = { 'AI model API': 9.7, 'At-risk host': 4.5, 'Malware host': 9.5, 'AI-driven attacker': 0, 'Attacker': 0, 'Botnet / spoofed': 1, 'Rogue insider': 2, 'Internal client': 3, 'Compromised host': 4, 'Victim': 5, 'Internal network': 6, 'Internal host': 7, 'External host': 8, 'External domain': 9, 'C2 server': 10 };
   const lanes = [...actors.values()].sort((a, b) => order[a.role] - order[b.role] || a.first - b.first);
   const stages = STAGES.map(s => { const ds = D.filter(d => d.stage === s.k); return { ...s, n: ds.length, t0: ds.length ? Math.min(...ds.map(d => d.t0)) : null, sev: ds.reduce((m, d) => Math.max(m, SEV_RANK[d.sev]), 0) }; });
   // narrative
-  const att = lanes.filter(l => l.role === 'Attacker').map(l => l.id);
+  const att = lanes.filter(l => l.role === 'Attacker' || l.role === 'AI-driven attacker').map(l => l.id);
+  const aiAtt = lanes.filter(l => l.role === 'AI-driven attacker').map(l => l.id);
   const comp = lanes.filter(l => l.role === 'Compromised host').map(l => l.id);
   const c2 = lanes.filter(l => l.role === 'C2 server').map(l => l.id);
   let story = '';
   const seen = stages.filter(s => s.n);
-  if (att.length) story += 'Activity from external attacker' + (att.length > 1 ? 's ' : ' ') + att.join(', ') + ' ';
+  if (att.length) story += 'Activity from ' + (aiAtt.length === att.length ? 'AI-driven ' : '') + 'external attacker' + (att.length > 1 ? 's ' : ' ') + att.join(', ') + ' ';
   if (seen.length) story += (att.length ? 'spans ' : 'Activity spans ') + seen.length + ' ATT&CK tactic' + (seen.length > 1 ? 's' : '') + ' (' + seen.map(s => s.name).join(' → ') + ').';
   if (comp.length) story += ' ' + comp.join(', ') + (comp.length > 1 ? ' appear' : ' appears') + ' compromised';
   if (comp.length && c2.length) story += ' and talks to C2 ' + c2.join(', ');
   if (comp.length) story += '.';
+  const ai = lanes.filter(l => l.role === 'AI model API').map(l => cap.llmIps.get(l.id) || l.id);
+  if (ai.length) story += ' An AI agent appears to be steering the attack through ' + ai.join(', ') + '.';
   return { lanes, steps, stages, story };
 }
 

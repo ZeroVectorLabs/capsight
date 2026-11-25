@@ -13,6 +13,9 @@ Notable changes to Capsight, newest first.
 - **Buttons:** monochrome, solid main buttons and underlined secondary ones, replacing the cyan gradient pills.
 - **Phones:** every screen reworked: a one-row header with icons, two-line packet rows with a long-press menu, the attack flow as a step list, a network map you can pan and pinch, and nothing pushing the page sideways.
 - Filter help lists clickable examples and every packet-list shortcut.
+- **AI-driven attack detection:** each attacker is scored on the signs AI agent frameworks such as ARTEX leave in traffic: reading the target's API map and then using it, replaying the same attack run, fixed-interval recheck loops, calls to AI model APIs, machine-speed even timing, agent HTTP clients and a machine-paced kill chain. The **AI-driven attack** detection lists every sign with its own "Show packets" button as evidence, and the attacker is labelled **AI-driven attacker** across the app and the report. Hosts that call model APIs during an attack get **AI agent at work on compromised host**.
+- **New detections:** web shells (upload and commands), cloud credentials taken from the instance metadata service, Active Directory reconnaissance over LDAP, cleartext LDAP binds, and kerberoasting.
+- The kill chain now includes Resource Development (TA0042), where ATT&CK places AI capabilities (T1588.007).
 - **New sample:** `samples/artex_ai_attack.pcap`, a synthetic ARTEX-style AI-driven intrusion built from public reporting (API-map recon, web shell, replayed runs, a 48-second recheck loop, metadata-service credential theft, AD recon, kerberoasting, lateral movement, exfiltration), with its generator `tools/gen_artex_pcap.py`.
 
 ## 3.1.1 (2026-11-25)

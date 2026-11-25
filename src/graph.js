@@ -57,7 +57,7 @@ function makeGraph(host) {
     const sv = svc.get(ip) ? [...svc.get(ip).entries()].sort((a, b) => b[1] - a[1]).map(x => x[0]) : [];
     let icon = zone === 'wan' ? 'globe' : sv.length ? 'server' : 'workstation';
     if (gwIps.has(ip)) icon = 'router'; if (!isIp(ip)) icon = 'device';
-    if (role === 'Attacker' || role === 'Rogue insider') icon = 'attacker'; if (role === 'C2 server' || role === 'Malware host') icon = 'c2';
+    if (role === 'Attacker' || role === 'AI-driven attacker' || role === 'Rogue insider') icon = 'attacker'; if (role === 'C2 server' || role === 'Malware host' || role === 'AI model API') icon = 'c2';
     let sub = names.get(ip) || '';
     if (!sub) sub = gwIps.has(ip) ? 'Gateway' + (sv.length ? ', ' + sv.slice(0, 2).join(', ') : '') : sv.length ? sv.slice(0, 3).join(', ') + ' server' : zone === 'lan' ? (isIp(ip) ? 'Workstation' : 'Unknown device') : 'Internet host';
     mk({ id: ip, label: ip, sub, icon, zone, role, host: h, bytes: h.tx + h.rx, isServer: sv.length > 0 });
@@ -83,7 +83,7 @@ function makeGraph(host) {
 
   // ---------- layout ----------
   const wan = nodes.filter(n => n.zone === 'wan'), lan = nodes.filter(n => n.zone === 'lan');
-  const roleRank = n => ({ 'Attacker': 0, 'Botnet / spoofed': 1, 'Malware host': 2, 'C2 server': 3 }[n.role] ?? 5);
+  const roleRank = n => ({ 'AI-driven attacker': 0, 'Attacker': 0, 'Botnet / spoofed': 1, 'Malware host': 2, 'C2 server': 3 }[n.role] ?? 5);
   wan.sort((a, b) => (a.group ? 1 : 0) - (b.group ? 1 : 0) || roleRank(a) - roleRank(b) || b.bytes - a.bytes);
   const lanRank = n => n.icon === 'router' ? 0 : n.isServer ? 1 : n.role ? 2 : n.group ? 4 : 3;
   lan.sort((a, b) => lanRank(a) - lanRank(b) || b.bytes - a.bytes);
@@ -159,7 +159,7 @@ function makeGraph(host) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('class', 'mapsvg'); host.appendChild(svg);
   const sevVar = s => 'var(' + SEV_VAR[s] + ')';
-  const roleVar = r => ({ 'Attacker': 'var(--crit)', 'Botnet / spoofed': 'var(--crit)', 'Rogue insider': 'var(--crit)', 'C2 server': 'var(--high)', 'Malware host': 'var(--high)', 'Compromised host': 'var(--med)', 'At-risk host': 'var(--med)', 'Victim': 'var(--low)' }[r]);
+  const roleVar = r => ({ 'AI-driven attacker': 'var(--crit)', 'Attacker': 'var(--crit)', 'Botnet / spoofed': 'var(--crit)', 'Rogue insider': 'var(--crit)', 'C2 server': 'var(--high)', 'AI model API': 'var(--high)', 'Malware host': 'var(--high)', 'Compromised host': 'var(--med)', 'At-risk host': 'var(--med)', 'Victim': 'var(--low)' }[r]);
   const tile = n => n.role && roleVar(n.role) ? roleVar(n.role) : n.zone === 'wan' ? 'var(--s7)' : n.icon === 'router' ? 'var(--teal)' : n.isServer ? 'var(--s3)' : 'var(--s1)';
   const draw = () => {
     route();

@@ -13,6 +13,7 @@ Network (an Azure virtual network, 10.20.0.0/24; Azure DNS 168.63.129.16)
   10.20.0.10  WEB01, public web app (the way in)   10.20.0.5   DC01, domain controller
   10.20.0.12  FS01, file server                     10.20.0.21  staff workstation
   10.20.0.30  SQL01                                 169.254.169.254  instance metadata service
+  openrouter.ai  AI model API, called by an agent relay on WEB01 (an assumption of this scenario)
   203.0.113.45   ARTEX operator host (recon, exploitation, recheck loop)
   198.51.100.77  staging server (tool download, exfiltration)
 """
@@ -316,10 +317,24 @@ for i, (flt, attrs) in enumerate([('objectClass', ['sAMAccountName', 'memberOf']
     tt = s.xfer(tt + 0.05, True, ldap_search(i + 2, 'DC=corp,DC=local', flt, attrs))
     tt = s.xfer(tt + 0.02, False, ber(0x30, b'\x02\x01' + bytes([i + 2]) + ber(0x64, ber(0x04, b'CN=svc_sql,OU=Service,DC=corp,DC=local') + random.randbytes(300))))
 t = s.close(tt + 0.1, rtt=0.001)
-# T1558.003: kerberoasting, one TGS request per service account
+# T1558.003: kerberoasting, one TGS-REQ per service account, asking for RC4 (etype 23)
+def der(tag, body):
+    n = len(body)
+    return bytes([tag]) + (bytes([n]) if n < 128 else (b'\x81' + bytes([n]) if n < 256 else b'\x82' + struct.pack('!H', n))) + body
+def ctx(n, body): return der(0xa0 + n, body)
+def kint(v): return der(0x02, v.to_bytes(max(1, (v.bit_length() + 8) // 8), 'big'))
+def gstr(x): return der(0x1b, x.encode())
+def tgs_req(spn, realm='CORP.LOCAL'):
+    svc, host = spn.split('/', 1)
+    pad = bytes(b for b in random.randbytes(400) if b != 0x1b)[:220]
+    body = der(0x30, ctx(0, der(0x03, b'\x00\x40\x81\x00\x10')) + ctx(2, gstr(realm)) +
+               ctx(3, der(0x30, ctx(0, kint(2)) + ctx(1, der(0x30, gstr(svc) + gstr(host))))) +
+               ctx(5, der(0x18, b'20370913024805Z')) + ctx(7, kint(random.randint(1, 2**31 - 1))) + ctx(8, der(0x30, kint(23))))
+    req = der(0x6c, der(0x30, ctx(1, kint(5)) + ctx(2, kint(12)) + ctx(3, der(0x30, der(0x30, ctx(1, kint(1)) + ctx(2, der(0x04, pad))))) + ctx(4, body)))
+    return struct.pack('!I', len(req)) + req
 for spn in ['MSSQLSvc/sql01.corp.local:1433', 'HTTP/web01.corp.local', 'CIFS/fs01.corp.local', 'svc_backup/fs01.corp.local', 'MSSQLSvc/sql01.corp.local']:
     s = TcpSess(WEB, DC, 88); tt = s.open(t + 0.08, rtt=0.001)
-    tt = s.xfer(tt, True, b'\x00\x00\x01\x40\x6c\x82\x01\x3c' + b'TGS-REQ etype=23 (RC4) ' + spn.encode() + random.randbytes(260))
+    tt = s.xfer(tt, True, tgs_req(spn))
     tt = s.xfer(tt + 0.01, False, b'\x00\x00\x05\x00\x6d\x82\x04\xfc' + random.randbytes(1272))
     t = s.close(tt + 0.01, rtt=0.001)
 
@@ -359,6 +374,12 @@ ex.send(tt + 0.001, True, 'PA', tls_client_hello('sync.files-cdn-sync.net'))
 tt = ex.xfer(tt + 0.09, False, tls_server_hello())
 tt = ex.xfer(tt + 0.01, True, tls_app(1_600_000, blocks), gap=0.0018)
 ex.close(tt + 0.1, rtt=0.08)
+
+# An agent relay on the foothold asks an AI model what to do next between steps
+# (an assumption of this scenario: public reports describe ARTEX handing off to AI coding assistants)
+dns(66.0, WEB, 'openrouter.ai', ['104.18.2.115'])
+for tt in (66.2, 79.5, 93.0, 104.0, 121.0, 139.5):
+    https(tt, WEB, '104.18.2.115', 'openrouter.ai', up=random.randint(5000, 14000), down=random.randint(1500, 6000))
 
 # The recheck loop: ARTEX polls its web shell every 48 seconds for the rest of the capture
 t = 110.0
