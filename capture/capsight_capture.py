@@ -2,11 +2,12 @@
 """
 Capsight Capture: record network traffic from one interface and save it as a .pcap file.
 
-It checks what your computer can do (permissions, capture driver, interfaces, disk space),
-lets you pick the network port to listen on, shows live counters while it records,
-and writes a standard pcap file you can open in Capsight, Wireshark or tcpdump.
+Capsight (https://zerovectorlabs.github.io/capsight/#capture) drives it: the Capture page checks what
+your computer can do (permissions, capture driver, interfaces, disk space), lets you pick the network
+port, shows live counters while it records, and keeps the finished capture in the browser.
+Browsers can't read network ports themselves, which is why this small helper has to run.
 
-    python3 capsight_capture.py            # opens the app in your browser
+    python3 capsight_capture.py            # runs in the background; capture from Capsight's Capture page
     python3 capsight_capture.py --cli      # same thing in the terminal
     python3 capsight_capture.py --check    # only show what this computer can capture
 
@@ -22,7 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-VERSION = '1.1.0'
+VERSION = '2.0.0'
 CAPSIGHT_URL = 'https://zerovectorlabs.github.io/capsight/'
 DEFAULT_PORT = 47115  # Capsight's "Capture live traffic" button looks for the helper here
 CAPSIGHT_ORIGINS = ('https://zerovectorlabs.github.io',)
@@ -533,23 +534,92 @@ def fmt_time(s):
 
 
 # ---------------------------------------------------------------- browser app
+def saved_captures(out_dir, limit=30):
+    """The captures Capsight Capture has saved in the folder, newest first."""
+    out = []
+    try:
+        for p in Path(out_dir).glob('capsight_*.pcap'):
+            try:
+                st = p.stat()
+            except OSError:
+                continue
+            parts = p.stem.split('_')
+            out.append({'name': p.name, 'size': st.st_size, 'mtime': st.st_mtime,
+                        'iface': '_'.join(parts[1:-1]) if len(parts) >= 3 else ''})
+    except OSError:
+        pass
+    out.sort(key=lambda x: -x['mtime'])
+    return out[:limit]
+
+
+def move_to_trash(path):
+    """Move a file to the user's Trash / Recycle Bin. Returns True if it went to the trash, False if it was deleted."""
+    path = Path(path)
+    home, uid, gid = real_user()
+    try:
+        if OS == 'Darwin':
+            tdir = home / '.Trash'
+            tdir.mkdir(exist_ok=True)
+            dest = tdir / path.name
+            n = 1
+            while dest.exists():
+                dest = tdir / f'{path.stem} {n}{path.suffix}'; n += 1
+            shutil.move(str(path), str(dest)); give_back(dest)
+            return True
+        if OS == 'Linux':
+            base = Path(os.environ.get('XDG_DATA_HOME') or home / '.local/share') / 'Trash'
+            (base / 'files').mkdir(parents=True, exist_ok=True); (base / 'info').mkdir(parents=True, exist_ok=True)
+            dest = base / 'files' / path.name
+            n = 1
+            while dest.exists():
+                dest = base / 'files' / f'{path.stem}.{n}{path.suffix}'; n += 1
+            (base / 'info' / (dest.name + '.trashinfo')).write_text(
+                f'[Trash Info]\nPath={path.resolve()}\nDeletionDate={datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}\n')
+            shutil.move(str(path), str(dest))
+            for q in (dest, base / 'info' / (dest.name + '.trashinfo')):
+                give_back(q)
+            return True
+        if OS == 'Windows':
+            import ctypes
+            from ctypes import wintypes
+
+            class SHFILEOPSTRUCTW(ctypes.Structure):
+                _fields_ = [('hwnd', wintypes.HWND), ('wFunc', wintypes.UINT), ('pFrom', wintypes.LPCWSTR), ('pTo', wintypes.LPCWSTR),
+                            ('fFlags', ctypes.c_uint16), ('fAnyOperationsAborted', wintypes.BOOL), ('hNameMappings', ctypes.c_void_p),
+                            ('lpszProgressTitle', wintypes.LPCWSTR)]
+            op = SHFILEOPSTRUCTW(None, 3, str(path.resolve()) + '\0', None, 0x40 | 0x10 | 0x04 | 0x400, False, None, None)
+            if ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op)) == 0 and not path.exists():
+                return True
+    except Exception:
+        pass
+    path.unlink()
+    return False
+
+
 class App:
     def __init__(self, out_dir):
         self.out_dir = out_dir
         self.session = None
-        self.history = []
         self.token = secrets.token_urlsafe(18)
         self.cap = None
 
     def state(self, refresh=False):
         if refresh or not self.cap:
             self.cap = capabilities(self.out_dir)
-        return {'version': VERSION, 'capabilities': self.cap, 'outDir': self.out_dir,
+        return {'version': VERSION, 'capabilities': self.cap, 'outDir': self.out_dir, 'os': OS,
                 'session': self.session.snapshot() if self.session else None,
-                'history': [h for h in self.history if Path(h['file']).exists()][-8:][::-1]}
+                'captures': saved_captures(self.out_dir)}
+
+
+def allowed_origin(o):
+    """Capsight's own site, or Capsight served from localhost while developing. Never 'null' (sandboxed pages)."""
+    import re
+    return o in CAPSIGHT_ORIGINS or bool(re.fullmatch(r'http://(localhost|127\.0\.0\.1)(:\d+)?', o or ''))
 
 
 def make_handler(app, host_port):
+    own = (f'http://127.0.0.1:{host_port}', f'http://localhost:{host_port}')
+
     class H(BaseHTTPRequestHandler):
         server_version = 'CapsightCapture'
 
@@ -557,29 +627,16 @@ def make_handler(app, host_port):
             pass
 
         def _ok_host(self):
-            # refuse DNS-rebinding tricks: only loopback names reach this app
+            # refuse DNS-rebinding tricks: only loopback names reach this helper
             return self.headers.get('Host', '') in (f'127.0.0.1:{host_port}', f'localhost:{host_port}')
 
-        def _ok_origin(self):
-            # only this app's own page, which carries the session token, may drive the sniffer
-            if not self._ok_host():
-                return False
-            return self.headers.get('X-Token') == app.token or parse_qs(urlparse(self.path).query).get('t', [''])[0] == app.token
+        def _origin(self):
+            o = self.headers.get('Origin', '')
+            return o if o not in own and allowed_origin(o) else ''
 
         def _cors(self):
-            o = self.headers.get('Origin', '')
-            return {'Access-Control-Allow-Origin': o, 'Vary': 'Origin', 'Access-Control-Allow-Private-Network': 'true'} if o in CAPSIGHT_ORIGINS else {}
-
-        def do_OPTIONS(self):
-            h = self._cors()
-            self.send_response(204 if h else 403)
-            for k, v in h.items():
-                self.send_header(k, v)
-            if h:
-                self.send_header('Access-Control-Allow-Methods', 'GET')
-                self.send_header('Access-Control-Max-Age', '600')
-            self.send_header('Content-Length', '0')
-            self.end_headers()
+            o = self._origin()
+            return {'Access-Control-Allow-Origin': o, 'Vary': 'Origin', 'Access-Control-Allow-Private-Network': 'true'} if o else {}
 
         def _send(self, code, body, ctype='application/json', extra=None):
             data = body if isinstance(body, bytes) else (json.dumps(body) if ctype == 'application/json' else body).encode()
@@ -588,54 +645,70 @@ def make_handler(app, host_port):
             self.send_header('Content-Length', str(len(data)))
             self.send_header('Cache-Control', 'no-store')
             self.send_header('X-Content-Type-Options', 'nosniff')
-            for k, v in (extra or {}).items():
+            for k, v in {**self._cors(), **(extra or {})}.items():
                 self.send_header(k, v)
             self.end_headers()
             self.wfile.write(data)
+
+        def do_OPTIONS(self):
+            ok = self._ok_host() and self._origin()
+            self.send_response(204 if ok else 403)
+            if ok:
+                for k, v in self._cors().items():
+                    self.send_header(k, v)
+                self.send_header('Access-Control-Allow-Methods', 'GET, POST')
+                self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+                self.send_header('Access-Control-Max-Age', '600')
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+
+        def _guard(self):
+            """Every action needs a request from Capsight's page (checked Origin) on a loopback Host."""
+            if not self._ok_host():
+                self._send(403, {'error': 'forbidden'}); return False
+            if not self._origin():
+                self._send(403, {'error': 'Only Capsight can use this helper.'}); return False
+            return True
 
         def do_GET(self):
             u = urlparse(self.path)
             if not self._ok_host():
                 return self._send(403, 'Forbidden', 'text/plain')
             if u.path == '/':
-                return self._send(200, PAGE.replace('__TOKEN__', app.token).replace('__ORIGINS__', json.dumps(list(CAPSIGHT_ORIGINS))), 'text/html',
-                                  {'Content-Security-Policy': "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'self'; frame-ancestors 'none'",
-                                   'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer'})
+                return self._send(200, STATUS_PAGE, 'text/html', {'X-Frame-Options': 'DENY', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"})
             if u.path == '/api/ping':
-                return self._send(200, {'app': 'capsight-capture', 'version': VERSION}, extra=self._cors())
-            if not self._ok_origin():
-                return self._send(403, {'error': 'forbidden'})
+                return self._send(200, {'app': 'capsight-capture', 'version': VERSION, 'os': OS})
+            if not self._guard():
+                return
+            q = parse_qs(u.query)
             if u.path == '/api/state':
-                return self._send(200, app.state(refresh=parse_qs(u.query).get('refresh') == ['1']))
+                return self._send(200, app.state(refresh=q.get('refresh') == ['1']))
             if u.path == '/api/download':
-                name = parse_qs(u.query).get('name', [''])[0]
-                p = (Path(app.out_dir) / Path(name).name)
-                if not name.endswith('.pcap') or not p.exists():
-                    return self._send(404, {'error': 'not found'})
-                return self._send(200, p.read_bytes(), 'application/vnd.tcpdump.pcap', {'Content-Disposition': f'attachment; filename="{p.name}"'})
+                name = Path(q.get('name', [''])[0]).name
+                p = Path(app.out_dir) / name
+                if not (name.startswith('capsight_') and name.endswith('.pcap')) or not p.is_file():
+                    return self._send(404, {'error': 'That capture is not there any more.'})
+                return self._send(200, p.read_bytes(), 'application/vnd.tcpdump.pcap')
             self._send(404, {'error': 'not found'})
 
         def do_POST(self):
-            if not self._ok_origin():
-                return self._send(403, {'error': 'forbidden'})
+            if not self._guard():
+                return
             n = int(self.headers.get('Content-Length') or 0)
             try:
-                body = json.loads(self.rfile.read(n) or b'{}')
+                body = json.loads(self.rfile.read(min(n, 65536)) or b'{}')
             except Exception:
                 body = {}
             path = urlparse(self.path).path
-            if path == '/api/test':
-                ok, why = can_capture_on(body.get('iface', ''))
-                return self._send(200, {'ok': ok, 'reason': why})
             if path == '/api/start':
                 if app.session and app.session.running:
-                    return self._send(409, {'error': 'Already recording'})
-                iface = body.get('iface', '')
+                    return self._send(409, {'error': 'Already recording.'})
+                iface = str(body.get('iface', ''))
                 ok, why = can_capture_on(iface)
                 if not ok:
-                    return self._send(400, {'error': friendly_error(why) if why else 'Cannot capture on that interface'})
+                    return self._send(400, {'error': friendly_error(why) if why else 'Cannot capture on that network port.'})
                 try:
-                    s = Session(iface, app.out_dir, body.get('filter', ''), int(body.get('duration') or 0), int(body.get('count') or 0),
+                    s = Session(iface, app.out_dir, str(body.get('filter', '')), int(body.get('duration') or 0), int(body.get('count') or 0),
                                 int(body.get('maxMb') or 0), bool(body.get('promisc', True)))
                     s.start()
                 except RuntimeError as e:
@@ -643,26 +716,35 @@ def make_handler(app, host_port):
                 except Exception as e:
                     return self._send(400, {'error': friendly_error(e)})
                 app.session = s
-                app.history.append({'file': str(s.path), 'name': s.path.name, 'iface': iface, 'started': s.started})
                 return self._send(200, {'ok': True})
             if path == '/api/stop':
                 if app.session:
                     app.session.stop()
                 return self._send(200, {'ok': True})
-            if path == '/api/reveal':
-                p = Path(app.out_dir) / Path(body.get('name', '')).name
+            if path == '/api/delete':
+                name = Path(str(body.get('name', ''))).name
+                p = Path(app.out_dir) / name
+                if not (name.startswith('capsight_') and name.endswith('.pcap')) or not p.is_file():
+                    return self._send(200, {'ok': True, 'gone': True})
+                if app.session and app.session.running and app.session.path.name == name:
+                    return self._send(409, {'error': 'Stop the recording before deleting it.'})
                 try:
+                    trashed = move_to_trash(p) if body.get('trash', True) else (p.unlink() or False)
+                except Exception as e:
+                    return self._send(500, {'error': f'Could not delete it: {e}'})
+                return self._send(200, {'ok': True, 'trashed': trashed})
+            if path == '/api/reveal':
+                p = Path(app.out_dir) / Path(str(body.get('name', ''))).name
+                try:
+                    target = p if p.exists() else Path(app.out_dir)
                     if OS == 'Darwin':
-                        subprocess.Popen(['open', '-R', str(p)])
+                        subprocess.Popen(['open', '-R', str(target)] if target.is_file() else ['open', str(target)])
                     elif OS == 'Windows':
-                        subprocess.Popen(['explorer', '/select,', str(p)])
+                        subprocess.Popen(['explorer', '/select,', str(target)] if target.is_file() else ['explorer', str(target)])
                     else:
-                        subprocess.Popen(['xdg-open', str(p.parent)])
+                        subprocess.Popen(['xdg-open', str(target if target.is_dir() else target.parent)])
                 except Exception as e:
                     return self._send(500, {'error': str(e)})
-                return self._send(200, {'ok': True})
-            if path == '/api/open-capsight':
-                webbrowser.open(CAPSIGHT_URL)
                 return self._send(200, {'ok': True})
             self._send(404, {'error': 'not found'})
     return H
@@ -673,18 +755,16 @@ def serve(args):
     try:
         srv = ThreadingHTTPServer(('127.0.0.1', args.port or DEFAULT_PORT), None)
     except OSError:
-        if args.port:
-            print(f'Port {args.port} is in use. Try another with --port.'); return 1
-        srv = ThreadingHTTPServer(('127.0.0.1', 0), None)
-        print(f'Note: port {DEFAULT_PORT} is busy (is Capsight Capture already running?), so the Capture button in Capsight will not find this copy.\n')
+        print(f'Port {args.port or DEFAULT_PORT} is in use. Is Capsight Capture already running?' + ('' if args.port else ' Close the other copy, or use --port.'))
+        return 1
     port = srv.server_address[1]
     srv.RequestHandlerClass = make_handler(app, port)
-    url = f'http://127.0.0.1:{port}/'
     cap = app.state(refresh=True)['capabilities']
     print_checks(cap)
-    print(f'\nCapsight Capture is running at:\n  {url}\n\nKeep this window open. Press Ctrl+C here to quit.')
+    page = CAPSIGHT_URL + '#capture'
+    print(f'\nCapsight Capture is running in the background (127.0.0.1:{port}).\nOpen Capsight and click "Capture live traffic":\n  {page}\n\nKeep this window open while you capture. Press Ctrl+C here to quit.')
     if not args.no_browser:
-        threading.Timer(0.6, lambda: webbrowser.open(url)).start()
+        threading.Timer(0.4, lambda: webbrowser.open(page)).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
@@ -697,145 +777,11 @@ def serve(args):
     return 0
 
 
-PAGE = r'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Capsight Capture</title><style>
-:root{--bg:#000;--panel:#141416;--panel2:#1b1c1f;--line:#26272b;--line2:#3a3b40;--text:#f5f5f7;--text2:#b4b6bd;--muted:#8b8d95;--ok:#6fcf97;--bad:#f2727f;--warn:#f2c66d;--cy:#67e8f9;--btn:linear-gradient(135deg,#67e8f9,#1fa6dd 60%,#2a8de0)}
-*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:1080px;margin:0 auto;padding:28px 28px 60px}
-header{display:flex;align-items:center;gap:14px;margin-bottom:26px}header svg{width:38px;height:38px}header h1{font-size:22px;margin:0;letter-spacing:-.02em}header p{margin:0;color:var(--muted);font-size:13px}
-.sp{flex:1}.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px 22px;margin-bottom:18px}
-.card h2{font-size:16px;margin:0 0 4px;letter-spacing:-.01em}.card .lead{color:var(--muted);margin:0 0 14px;font-size:13px}
-.checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px 18px}
-.chk{display:flex;gap:10px;align-items:flex-start;padding:8px 0}.chk i{flex:none;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;margin-top:1px}
-.chk i.y{background:rgba(111,207,151,.16);color:var(--ok)}.chk i.n{background:rgba(242,114,127,.16);color:var(--bad)}
-.chk b{display:block;font-weight:600}.chk span{color:var(--text2);font-size:13px;word-break:break-word}.chk .fix{color:var(--warn);font-size:12.5px;margin-top:2px;font-family:ui-monospace,Menlo,Consolas,monospace}
-.banner{border-radius:12px;padding:12px 16px;margin-bottom:14px;font-weight:600}.banner.ok{background:rgba(111,207,151,.1);color:var(--ok)}.banner.bad{background:rgba(242,114,127,.1);color:var(--bad)}
-.ifs{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:10px}
-.if{position:relative;text-align:left;background:var(--panel2);border:1.5px solid var(--line);border-radius:14px;padding:14px 16px;color:var(--text);cursor:pointer;font:inherit;transition:border-color .15s,background .15s}
-.if:hover{border-color:var(--line2)}.if.on{border-color:var(--cy);background:rgba(103,232,249,.06)}.if.off{opacity:.55}
-.if .top{display:flex;align-items:center;gap:8px}.if .nm{font-weight:650;font-size:15px}.tag{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:#26272b;color:var(--text2)}
-.tag.Ethernet{color:#8bbaff}.tag.Wi-Fi{color:#c4b5fd}.tag.def{background:rgba(103,232,249,.14);color:var(--cy)}
-.if .meta{margin-top:8px;display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-size:12.5px;color:var(--muted)}.if .meta b{color:var(--text2);font-weight:500;font-family:ui-monospace,Menlo,Consolas,monospace;word-break:break-all}
-.dot{width:8px;height:8px;border-radius:50%;display:inline-block}.dot.up{background:var(--ok)}.dot.down{background:var(--bad)}.dot.unk{background:var(--muted)}
-.row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:12px;margin-top:6px}label.f{display:block;font-size:12.5px;color:var(--muted);margin-bottom:5px}
-input[type=text],input[type=number]{width:100%;background:var(--panel2);border:1px solid var(--line2);border-radius:10px;padding:10px 12px;color:var(--text);font:13px ui-monospace,Menlo,Consolas,monospace}
-input:focus{outline:2px solid rgba(103,232,249,.5);outline-offset:1px}.presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-.chip:disabled,input:disabled{opacity:.45;cursor:not-allowed}.chip{background:#1f2024;border:1px solid var(--line2);color:var(--text2);border-radius:999px;padding:4px 11px;font-size:12px;cursor:pointer;font-family:inherit}.chip:hover{color:var(--text)}
-.opts{display:flex;align-items:center;gap:18px;margin-top:14px;color:var(--text2);font-size:13px;flex-wrap:wrap}
-.btn{border:0;border-radius:999px;padding:11px 22px;font:600 14px/1 inherit;font-family:inherit;cursor:pointer}.btn.go{background:var(--btn);color:#04111f}.btn.stop{background:#f2727f;color:#1a0306}
-.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line2)}.btn:disabled{opacity:.45;cursor:not-allowed}
-.live{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:6px 0 16px}.stat{background:var(--panel2);border-radius:12px;padding:12px 14px}.stat small{color:var(--muted);font-size:12px}.stat div{font-size:24px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
-.rec{display:inline-flex;align-items:center;gap:8px;font-weight:600;color:var(--bad)}.rec i{width:10px;height:10px;border-radius:50%;background:var(--bad);animation:p 1.2s infinite}@keyframes p{50%{opacity:.25}}
-.bars{display:grid;grid-template-columns:1fr 1fr;gap:18px}.bar{display:grid;grid-template-columns:110px 1fr 70px;align-items:center;gap:10px;font-size:12.5px;margin:5px 0}.bar .t{height:8px;border-radius:4px;background:#26272b;overflow:hidden}.bar .t i{display:block;height:100%;background:var(--btn)}
-.bar span:first-child{color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bar span:last-child{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
-.done{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:rgba(111,207,151,.08);border:1px solid rgba(111,207,151,.25);border-radius:14px;padding:14px 16px;margin-top:6px}
-.done .fn{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;color:var(--text2);word-break:break-all}.err{color:var(--bad);margin-top:10px;font-weight:600}
-.hist a{color:var(--cy);text-decoration:none}.hist li{margin:4px 0;color:var(--text2)}.hist{padding-left:18px;margin:0}
-.foot{color:var(--muted);font-size:12px;margin-top:10px}.hidden{display:none!important}
-@media(max-width:760px){.row,.live,.bars{grid-template-columns:1fr 1fr}}
-</style></head><body><div class="wrap">
-<header><svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#67e8f9"/><stop offset=".6" stop-color="#1fa6dd"/><stop offset="1" stop-color="#2a8de0"/></linearGradient></defs><circle cx="24" cy="24" r="17" fill="none" stroke="url(#g)" stroke-width="6" stroke-dasharray="80 30" stroke-linecap="round" transform="rotate(35 24 24)"/><circle cx="24" cy="24" r="6.5" fill="url(#g)"/></svg>
-<div><h1>Capsight Capture</h1><p>Record traffic from a network port and save it as a .pcap file.</p></div><span class="sp"></span><button class="btn ghost" id="recheck">Check again</button></header>
-
-<section class="card"><h2>This computer</h2><p class="lead">What Capsight Capture needs to record traffic here.</p><div id="banner" class="banner"></div><div class="checks" id="checks"></div></section>
-
-<section class="card" id="setup"><h2>1. Choose a network port</h2><p class="lead">Pick the interface the traffic goes through. The one marked “default” carries your internet traffic.</p><div class="ifs" id="ifs"></div>
-<h2 style="margin-top:22px">2. Options</h2>
-<div class="row"><div><label class="f" for="flt">Capture filter (optional, BPF syntax)</label><input type="text" id="flt" placeholder="all traffic" spellcheck="false">
-<div class="presets"><button class="chip" data-f="">All traffic</button><button class="chip" data-f="tcp port 80 or tcp port 443">Web</button><button class="chip" data-f="port 53">DNS</button><button class="chip" data-f="not port 22">Not SSH</button><button class="chip" data-f="arp or icmp">ARP and ping</button></div></div>
-<div><label class="f" for="dur">Stop after (seconds)</label><input type="number" id="dur" min="0" placeholder="no limit"></div>
-<div><label class="f" for="cnt">Stop after (packets)</label><input type="number" id="cnt" min="0" placeholder="no limit"></div>
-<div><label class="f" for="mb">Stop at file size (MB)</label><input type="number" id="mb" min="0" placeholder="no limit"></div></div>
-<div class="opts"><label><input type="checkbox" id="promisc" checked> Promiscuous mode (see traffic for other devices too)</label><span class="sp"></span><span id="savehint" class="foot"></span><button class="btn go" id="start" disabled>Start capture</button></div>
-<div class="err hidden" id="err"></div></section>
-
-<section class="card hidden" id="run"><div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><span class="rec" id="recl"><i></i>Recording</span><span id="runon" class="foot" style="margin:0"></span><span class="sp"></span><button class="btn stop" id="stop">Stop and save</button></div>
-<div class="live"><div class="stat"><small>Packets</small><div id="sp">0</div></div><div class="stat"><small>Data</small><div id="sb">0 B</div></div><div class="stat"><small>Rate</small><div id="sr">0</div></div><div class="stat"><small>Time</small><div id="st">0:00</div></div></div>
-<div class="bars"><div><h2 style="font-size:14px">Protocols</h2><div id="pr"></div></div><div><h2 style="font-size:14px">Busiest addresses</h2><div id="tk"></div></div></div>
-<div class="done hidden" id="done"><div style="flex:1;min-width:240px"><b id="dmsg">Saved</b><div class="fn" id="dfile"></div></div><a class="btn go" id="dl" href="#" style="text-decoration:none">Download .pcap</a><button class="btn ghost" id="reveal">Show in folder</button><button class="btn ghost" id="capsight">Open Capsight</button><button class="btn ghost" id="again">New capture</button></div>
-<div class="err hidden" id="rerr"></div></section>
-
-<section class="card hidden" id="histc"><h2>Recent captures</h2><ul class="hist" id="hist"></ul></section>
-<p class="foot">Runs only on this computer (127.0.0.1); captures are only handed to the Capsight tab that opened this window. Only capture on networks you own or are allowed to monitor.</p>
-</div><script>
-const T = '__TOKEN__', $ = s => document.querySelector(s);
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const human = n => { n = +n || 0; for (const u of ['B','KB','MB','GB']) { if (n < 1024 || u === 'GB') return u === 'B' ? n.toFixed(0) + ' B' : n.toFixed(1) + ' ' + u; n /= 1024; } };
-const fmtT = s => { s = Math.floor(s); return s >= 3600 ? Math.floor(s/3600) + ':' + String(Math.floor(s/60)%60).padStart(2,'0') + ':' + String(s%60).padStart(2,'0') : Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); };
-const api = (p, body) => fetch(p + (p.includes('?') ? '&' : '?') + 't=' + T, body ? { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Token': T }, body: JSON.stringify(body) } : { headers: { 'X-Token': T } }).then(async r => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || r.statusText); return j; });
-let S = null, sel = null, poll = null, ready = false;
-
-function renderChecks(c) {
-  ready = c.ready;
-  $('#banner').className = 'banner ' + (c.ready ? 'ok' : 'bad');
-  $('#banner').textContent = c.ready ? 'Ready to capture.' : 'Not ready yet. Fix the items marked ✗, then click Check again.';
-  $('#checks').innerHTML = c.checks.map(x => `<div class="chk"><i class="${x.ok ? 'y' : 'n'}">${x.ok ? '✓' : '✕'}</i><div><b>${esc(x.label)}</b><span>${esc(x.detail)}</span>${!x.ok && x.fix ? `<div class="fix">${esc(x.fix)}</div>` : ''}</div></div>`).join('');
-}
-function renderIfs(list) {
-  if (!sel || !list.some(i => i.name === sel)) sel = (list.find(i => i.default) || list.find(i => i.up && i.kind !== 'Loopback') || list[0] || {}).name;
-  $('#ifs').innerHTML = list.map(i => `<button class="if ${i.name === sel ? 'on' : ''} ${i.up === false ? 'off' : ''}" data-n="${esc(i.name)}"><div class="top"><span class="dot ${i.up ? 'up' : i.up === false ? 'down' : 'unk'}" title="${i.up ? 'Up' : i.up === false ? 'Down' : 'Unknown'}"></span><span class="nm">${esc(i.label)}</span><span class="tag ${esc(i.kind)}">${esc(i.kind)}</span>${i.default ? '<span class="tag def">default</span>' : ''}</div>
-    ${i.description ? `<div class="foot" style="margin:4px 0 0">${esc(i.description)}</div>` : ''}
-    <div class="meta"><span>IPv4</span><b>${esc(i.ipv4 || '—')}</b><span>MAC</span><b>${esc(i.mac || '—')}</b>${i.speed ? `<span>Speed</span><b>${i.speed >= 1000 ? i.speed / 1000 + ' Gb/s' : i.speed + ' Mb/s'}</b>` : ''}${i.traffic != null ? `<span>Traffic so far</span><b>${human(i.traffic)}</b>` : ''}</div></button>`).join('');
-  document.querySelectorAll('.if').forEach(b => b.onclick = () => { sel = b.dataset.n; renderIfs(list); });
-  $('#start').disabled = !ready || !sel;
-}
-function renderRun(s) {
-  const on = s && (s.running || s.packets || s.error || s.stop_reason);
-  $('#setup').classList.toggle('hidden', !!(s && s.running));
-  $('#run').classList.toggle('hidden', !on);
-  if (!on) return;
-  $('#recl').classList.toggle('hidden', !s.running); $('#stop').classList.toggle('hidden', !s.running);
-  $('#runon').textContent = 'on ' + s.iface + (s.filter ? ', filter: ' + s.filter : '') + (s.limits.duration ? ', stops after ' + s.limits.duration + ' s' : '');
-  $('#sp').textContent = s.packets.toLocaleString(); $('#sb').textContent = human(s.bytes);
-  $('#sr').textContent = s.running ? Math.round(s.pps).toLocaleString() + '/s' : '—'; $('#st').textContent = fmtT(s.elapsed);
-  const bars = (rows, total, fmt) => rows.length ? rows.map(([k, v]) => `<div class="bar"><span title="${esc(k)}">${esc(k)}</span><div class="t"><i style="width:${Math.max(2, v / total * 100)}%"></i></div><span>${fmt(v)}</span></div>`).join('') : '<div class="foot">Waiting for packets…</div>';
-  $('#pr').innerHTML = bars(s.protocols, Math.max(1, s.protocols[0]?.[1] || 1), v => v.toLocaleString());
-  $('#tk').innerHTML = bars(s.talkers, Math.max(1, s.talkers[0]?.[1] || 1), human);
-  $('#done').classList.toggle('hidden', s.running);
-  if (!s.running) { $('#dmsg').textContent = (s.stop_reason || 'Stopped') + '. Saved ' + s.packets.toLocaleString() + ' packets (' + human(s.size) + ').'; $('#dfile').textContent = s.file; $('#dl').href = '/api/download?name=' + encodeURIComponent(s.name) + '&t=' + T; }
-  $('#rerr').classList.toggle('hidden', !s.error); $('#rerr').textContent = s.error || '';
-}
-function renderHist(h) {
-  $('#histc').classList.toggle('hidden', !h.length);
-  $('#hist').innerHTML = h.map(x => `<li><a href="/api/download?name=${encodeURIComponent(x.name)}&t=${T}">${esc(x.name)}</a> · ${esc(x.iface)}</li>`).join('');
-}
-async function refresh(full) {
-  try { S = await api('/api/state' + (full ? '?refresh=1' : '')); } catch (e) { $('#banner').className = 'banner bad'; $('#banner').textContent = 'Lost contact with Capsight Capture. Is it still running in the terminal?'; return; }
-  if (full) { renderChecks(S.capabilities); renderIfs(S.capabilities.interfaces); $('#savehint').textContent = 'Saves to ' + S.outDir;
-    const f = S.capabilities.filters; $('#flt').disabled = !f; $('#flt').placeholder = f ? 'all traffic' : 'filters need libpcap; records all traffic'; document.querySelectorAll('.chip[data-f]').forEach(c => c.disabled = !f); }
-  renderRun(S.session); renderHist(S.history);
-  clearInterval(poll); if (S.session && S.session.running) poll = setInterval(() => refresh(false), 700);
-}
-$('#recheck').onclick = () => refresh(true);
-document.querySelectorAll('.chip[data-f]').forEach(c => c.onclick = () => { $('#flt').value = c.dataset.f; });
-$('#start').onclick = async () => {
-  $('#err').classList.add('hidden'); $('#start').disabled = true; $('#start').textContent = 'Starting…';
-  try { await api('/api/start', { iface: sel, filter: $('#flt').value, duration: +$('#dur').value || 0, count: +$('#cnt').value || 0, maxMb: +$('#mb').value || 0, promisc: $('#promisc').checked }); await refresh(false); }
-  catch (e) { $('#err').textContent = e.message; $('#err').classList.remove('hidden'); }
-  $('#start').disabled = !ready; $('#start').textContent = 'Start capture';
-};
-$('#stop').onclick = async () => { $('#stop').disabled = true; await api('/api/stop', {}).catch(() => {}); $('#stop').disabled = false; refresh(false); };
-$('#reveal').onclick = () => api('/api/reveal', { name: S.session.name }).catch(e => alert(e.message));
-// Opened from Capsight's "Capture live traffic" button? Then the finished capture goes straight back into it.
-const ORIGINS = __ORIGINS__; let capsight = null;
-const okOrigin = o => ORIGINS.includes(o) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(o) && o !== location.origin;
-window.addEventListener('message', e => { if (e.source === window.opener && okOrigin(e.origin) && e.data && e.data.type === 'capsight-hello') { capsight = e.origin; $('#capsight').textContent = 'Open in Capsight'; } });
-if (window.opener) try { window.opener.postMessage({ type: 'capsight-capture-ready' }, '*'); } catch (e) {}
-$('#capsight').onclick = async () => {
-  if (capsight && window.opener && !window.opener.closed) {
-    const b = $('#capsight'); b.disabled = true; b.textContent = 'Sending…';
-    try {
-      const r = await fetch('/api/download?name=' + encodeURIComponent(S.session.name) + '&t=' + T); const buf = await r.arrayBuffer();
-      window.opener.postMessage({ type: 'capsight-pcap', name: S.session.name, buf }, capsight, [buf]);
-      b.textContent = 'Opened in Capsight ✓'; setTimeout(() => window.close(), 900);
-    } catch (e) { b.textContent = 'Open in Capsight'; alert('Could not send the capture: ' + e.message); }
-    b.disabled = false; return;
-  }
-  api('/api/open-capsight', {});
-};
-$('#again').onclick = () => { $('#run').classList.add('hidden'); $('#setup').classList.remove('hidden'); };
-refresh(true);
-</script></body></html>'''
+STATUS_PAGE = """<!doctype html><meta charset="utf-8"><title>Capsight Capture</title>
+<body style="margin:0;display:grid;place-items:center;height:100vh;background:#000;color:#f5f5f7;font:15px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<div style="text-align:center;max-width:460px;padding:24px"><h1 style="font-size:22px;margin:0 0 8px">Capsight Capture is running</h1>
+<p style="color:#b4b6bd;margin:0 0 20px">Capturing happens from Capsight. Open it and click <b>Capture live traffic</b>.</p>
+<a href="https://zerovectorlabs.github.io/capsight/#capture" style="display:inline-block;padding:12px 22px;border-radius:999px;background:linear-gradient(135deg,#67e8f9,#1fa6dd 60%,#2a8de0);color:#04111f;font-weight:600;text-decoration:none">Open Capsight</a></div></body>"""
 
 
 # ---------------------------------------------------------------- main
@@ -852,7 +798,7 @@ def main():
     ap.add_argument('--no-promisc', action='store_true', help='only see traffic to and from this computer')
     ap.add_argument('-o', '--out', default=str(real_user()[0] / 'Captures'), help='folder to save captures in (default ~/Captures)')
     ap.add_argument('--port', type=int, default=0, help=f'port for the browser app (default {DEFAULT_PORT})')
-    ap.add_argument('--no-browser', action='store_true', help="don't open the browser automatically")
+    ap.add_argument('--no-browser', action='store_true', help="don't open Capsight in the browser automatically")
     ap.add_argument('--version', action='version', version=f'Capsight Capture {VERSION}')
     args = ap.parse_args()
     args.out = os.path.abspath(os.path.expanduser(args.out))
