@@ -52,7 +52,13 @@ async function capApi(path, body, binary) {
     return j;
   } finally { clearTimeout(t); }
 }
-async function capPing() { try { return await capApi('/api/ping'); } catch (e) { return null; } }
+async function capPing() {
+  try { return await capApi('/api/ping'); }
+  catch (e) {
+    // something answers on the port but won't talk to this page: an old helper (1.x) or another program
+    try { await fetch(CAP_API + '/api/ping', { mode: 'no-cors', cache: 'no-store' }); return { version: '1', old: true }; } catch (e2) { return null; }
+  }
+}
 
 /* ---------- page show / hide ---------- */
 function openCapturePage() {
@@ -84,12 +90,14 @@ function leaveCapturePage() {
 async function capTick(full) {
   clearTimeout(CP.timer);
   if (!CP.on) return;
-  const ping = await capPing();
+  let ping = await capPing();
+  CP.outdated = !!ping && parseInt(ping.version, 10) < 2;  // 1.x had its own page and a different API
+  if (CP.outdated) ping = null;
   const was = CP.helper;
   CP.helper = ping;
   if (ping) {
     try { CP.state = await capApi('/api/state' + (full || !was ? '?refresh=1' : '')); CP.lastErr = ''; }
-    catch (e) { CP.lastErr = e.message; }
+    catch (e) { CP.state = null; CP.lastErr = /fetch|network|abort/i.test(e.message) ? 'Capsight Capture stopped answering. Check that it is still running in its Terminal window.' : e.message; }
     await capImportFinished();
   } else CP.state = null;
   capRender();
@@ -116,18 +124,18 @@ function capRender() {
   const el = $('#cp-main'); if (!el) return;
   const conn = $('#cp-conn');
   conn.className = 'cp-conn ' + (CP.helper ? 'ok' : '');
-  conn.innerHTML = CP.helper ? `<i></i>Capsight Capture ${esc(CP.helper.version)} connected` : '<i></i>Looking for Capsight Capture…';
-  if (!CP.helper) { el.innerHTML = capSetupHtml(); return; }
+  conn.innerHTML = CP.helper ? `<i></i>Capsight Capture ${esc(CP.helper.version)} connected` : CP.outdated ? '<i></i>Old version of Capsight Capture found' : '<i></i>Looking for Capsight Capture…';
+  if (!CP.helper) { el.innerHTML = capSetupHtml(CP.outdated); return; }
   if (!CP.state) { el.innerHTML = `<div class="card cp-card"><p class="cp-muted">${esc(CP.lastErr || 'Connecting…')}</p></div>`; return; }
   const s = CP.state.session;
   if (s && s.running) capRenderRun(el, s);
   else capRenderSetup(el, s);
 }
-function capSetupHtml() {
+function capSetupHtml(outdated) {
   const os = /Mac/i.test(navigator.userAgent) ? 'mac' : /Win/i.test(navigator.userAgent) ? 'win' : 'linux';
   const step = (k, html) => `<li class="${os === k ? 'me' : ''}">${html}</li>`;
-  return `<div class="card cp-card"><h2>Start Capsight Capture on this computer</h2>
-    <p class="cp-muted">A web page can’t read network ports, so a small open-source helper does the recording. Start it once; everything else happens on this page. Nothing is uploaded.</p>
+  return `<div class="card cp-card ${outdated ? 'cp-old' : ''}"><h2>${outdated ? 'Update Capsight Capture' : 'Start Capsight Capture on this computer'}</h2>
+    <p class="cp-muted">${outdated ? 'An older version of Capsight Capture is running on this computer. It can’t talk to this page. Stop it (press <b>Ctrl+C</b> in its Terminal window, or close that window), then download and start the new version:' : 'A web page can’t read network ports, so a small open-source helper does the recording. Start it once; everything else happens on this page. Nothing is uploaded.'}</p>
     <ol class="cp-steps">
       <li><a class="pbtn fill sm" href="${CAP_ZIP}" download>Download Capsight Capture</a> <span class="cp-muted">Mac, Windows and Linux · <a href="${CAP_SRC}" target="_blank" rel="noopener">source on GitHub</a></span></li>
       <li>Unzip it and start it:<ul>
