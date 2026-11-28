@@ -36,7 +36,7 @@ jobs:
           printf '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://zerovectorlabs.github.io/capsight/</loc><lastmod>%s</lastmod></url></urlset>\n' "$(date -u +%F)" > _site/sitemap.xml
           touch _site/.nojekyll
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
